@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(node:*)",
+      "Bash(npx:*)",
+      "Bash(shopt:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:blog.splitwise.com)",
+      "WebFetch(domain:dribbble.com)",
+      "mcp__ide__getDiagnostics",
+      "Bash(./gradlew.bat app:installDebug:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(./gradlew.bat clean:*)",
+      "Bash(adb shell:*)",
+      "Bash(adb logcat:*)",
+      "Bash(curl:*)",
+      "Bash(adb uninstall:*)",
+      "Bash(./gradlew app:dependencies:*)",
+      "Bash(./gradlew clean:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(./gradlew app:installDebug:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(powershell:*)",
+      "Bash(xargs grep:*)",
+      "Bash(emulator -list-avds 2>&1)",
+      "Bash(adb wait-for-device:*)",
+      "Bash(adb devices:*)",
+      "Bash(sleep 5 && adb shell screencap -p /sdcard/screen1.png && adb pull /sdcard/screen1.png \"E:/Split Tracker/screen1.png\" 2>&1)",
+      "Bash(adb exec-out:*)",
+      "Bash(sleep 10 && adb exec-out screencap -p > \"E:/Split Tracker/screen2.png\" 2>&1)",
+      "Bash(sleep 12 && adb exec-out screencap -p > \"E:/Split Tracker/screen3.png\" 2>&1)",
+      "Bash(sleep 1 && adb exec-out screencap -p > \"E:\\\\Split Tracker\\\\screen_groups.png\" 2>&1 && echo \"captured\")",
+      "Bash(sleep 5 && adb exec-out screencap -p > \"E:\\\\Split Tracker\\\\screen_fix2_groups.png\" && echo \"captured\")",
+      "Bash(find \"E:/Split Tracker/android/src\" -type f -name \"*.ts\" -o -name \"*.tsx\" 2>/dev/null | sort)",
+      "Bash(find \"E:/Split Tracker/src\" -type f -name \"*.ts\" -o -name \"*.tsx\" 2>/dev/null | sort)",
+      "Bash(cd \"E:/Split Tracker/android\" && ./gradlew assembleDebug 2>&1 | tail -15)",
+      "Bash(gh auth:*)"
+    ]
+  }
+}
