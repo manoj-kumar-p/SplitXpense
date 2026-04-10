@@ -80,7 +80,8 @@ export default function SyncScreen() {
 
   const styles = makeStyles(colors);
   const wifiPeerPhones = new Set(registry.getWifiPeers().map(p => p.phone));
-  const blePeerPhones = new Set(registry.getBlePeers().map(p => p.phone));
+  const blePeers = registry.getBlePeers();
+  const blePeerPhones = new Set(blePeers.map(p => p.phone));
 
   const getLastSync = (peer: Peer): string => {
     const times = [
@@ -137,12 +138,12 @@ export default function SyncScreen() {
                 <TouchableOpacity
                   style={styles.nearbyPeerRow}
                   onPress={() => {
-                    const peer = peers.find(p => p.phone_number === bp.phone);
+                    const peer = peers.find(p => p.phone_number.endsWith(bp.phone));
                     if (peer) handleSync(peer, 'ble');
                   }}>
                   <Icon name="account-circle-outline" size={20} color={colors.text} />
                   <Text style={[styles.nearbyPeerName, {color: colors.text}]}>{bp.name}</Text>
-                  {syncing === bp.phone ? (
+                  {syncing?.endsWith(bp.phone) ? (
                     <ActivityIndicator size="small" color={colors.text} />
                   ) : (
                     <Icon name="sync" size={18} color={colors.textMuted} />
@@ -170,7 +171,7 @@ export default function SyncScreen() {
           contentContainerStyle={{paddingBottom: spacing.base}}
           renderItem={({item}) => {
             const isOnWifi = wifiPeerPhones.has(item.phone_number);
-            const isOnBle = blePeerPhones.has(item.phone_number);
+            const isOnBle = blePeers.some(bp => item.phone_number.endsWith(bp.phone));
             const isSyncing = syncing === item.phone_number;
 
             return (
@@ -204,20 +205,23 @@ export default function SyncScreen() {
                       {isOnWifi && (
                         <TouchableOpacity
                           style={[styles.syncBtn, {borderColor: colors.border}]}
-                          onPress={() => handleSync(item, 'wifi')}>
+                          onPress={() => handleSync(item, 'wifi')}
+                          hitSlop={{top: 5, bottom: 5, left: 5, right: 5}}>
                           <Icon name="wifi" size={14} color={colors.text} />
                         </TouchableOpacity>
                       )}
                       {isOnBle && (
                         <TouchableOpacity
                           style={[styles.syncBtn, {borderColor: colors.border}]}
-                          onPress={() => handleSync(item, 'ble')}>
+                          onPress={() => handleSync(item, 'ble')}
+                          hitSlop={{top: 5, bottom: 5, left: 5, right: 5}}>
                           <Icon name="bluetooth" size={14} color={colors.text} />
                         </TouchableOpacity>
                       )}
                       <TouchableOpacity
                         style={[styles.syncBtn, {borderColor: colors.border}]}
-                        onPress={() => handleSync(item, 'sms')}>
+                        onPress={() => handleSync(item, 'sms')}
+                        hitSlop={{top: 5, bottom: 5, left: 5, right: 5}}>
                         <Icon name="message-text-outline" size={14} color={colors.text} />
                       </TouchableOpacity>
                     </View>

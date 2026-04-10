@@ -27,7 +27,7 @@ export function EmptyState({icon, title, subtitle, ctaLabel, onCtaPress}: Props)
           style={[styles.cta, {borderColor: colors.border}]}
           onPress={onCtaPress}
           activeOpacity={0.7}>
-          <Text style={{fontSize: 14, fontWeight: '600', color: colors.text}}>
+          <Text style={{fontSize: fonts.sizes.base, fontWeight: '600', color: colors.text}}>
             {ctaLabel}
           </Text>
         </TouchableOpacity>
@@ -38,6 +38,7 @@ export function EmptyState({icon, title, subtitle, ctaLabel, onCtaPress}: Props)
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,

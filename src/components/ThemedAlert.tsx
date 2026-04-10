@@ -38,6 +38,8 @@ export function AlertProvider({children}: {children: React.ReactNode}) {
   const showAlert = useCallback((cfg: AlertConfig) => {
     setConfig(cfg);
     setVisible(true);
+    fadeAnim.setValue(0);
+    scaleAnim.setValue(0.9);
     Animated.parallel([
       Animated.timing(fadeAnim, {toValue: 1, duration: 200, useNativeDriver: true}),
       Animated.spring(scaleAnim, {toValue: 1, tension: 65, friction: 10, useNativeDriver: true}),

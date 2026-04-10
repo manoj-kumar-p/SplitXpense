@@ -32,5 +32,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: spacing.base,
   },
+  // noPadding reserved for future use - card has no default padding
   noPadding: {},
 });

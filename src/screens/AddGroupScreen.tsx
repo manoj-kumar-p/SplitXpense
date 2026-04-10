@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList, KeyboardAvoidingView, Platform} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,6 +10,7 @@ import {fonts} from '../theme/fonts';
 import {spacing} from '../theme/spacing';
 import {createGroup, addGroupMember} from '../db/queries/groupQueries';
 import {getLocalUser} from '../db/queries/userQueries';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import {GROUP_ICON_EMOJIS} from '../utils/groupIcons';
 import type {GroupsStackParamList} from '../types/navigation';
 
@@ -34,7 +35,7 @@ export default function AddGroupScreen() {
     const user = getLocalUser();
     if (!user) return;
 
-    const now = Date.now().toString();
+    const now = generateHlcTimestamp();
     const group = createGroup(name.trim(), description.trim(), user.phone_number, now, selectedEmoji);
 
     // Add self as first member
@@ -54,6 +55,7 @@ export default function AddGroupScreen() {
   const styles = makeStyles(colors);
 
   return (
+    <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
       {/* Icon Picker */}
       <TouchableOpacity
@@ -136,6 +138,7 @@ export default function AddGroupScreen() {
         />
       </BottomSheet>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

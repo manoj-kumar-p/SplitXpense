@@ -63,3 +63,5 @@ declare module '@ernestbies/react-native-android-sms-listener' {
 
   export default SmsListener;
 }
+
+declare var __pendingQuickAddTxnId: string | undefined;

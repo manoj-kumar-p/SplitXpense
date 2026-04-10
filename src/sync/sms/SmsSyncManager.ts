@@ -74,6 +74,12 @@ export class SmsSyncManager {
         messagesSent++;
       }
 
+      // After sending deltas, update vector clock with our latest HLC
+      const latestOps = deltas.length > 0 ? deltas[deltas.length - 1] : null;
+      if (latestOps) {
+        updateVectorClock(peerPhone, latestOps.origin_peer, latestOps.hlc_timestamp);
+      }
+
       updatePeerSmsSync(peerPhone);
 
       notifySyncComplete('sms', messagesSent).catch(() => {});

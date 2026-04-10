@@ -3,6 +3,7 @@ import {
   insertSmsFragment,
   getSmsFragments,
   markFragmentsReassembled,
+  getPeer,
 } from '../../db/queries/syncQueries';
 import {reassembleChunks} from './SmsChunker';
 import type {MessageType} from './types';
@@ -44,6 +45,9 @@ export class SmsListener {
 
   private handleIncoming(senderPhone: string, body: string): void {
     if (!isSyncMessage(body)) return;
+
+    // Reject messages from unknown peers
+    if (!getPeer(senderPhone)) return;
 
     const msg = decodeSmsMessage(body);
     if (!msg) return;

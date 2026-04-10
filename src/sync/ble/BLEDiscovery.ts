@@ -11,6 +11,7 @@ export class BLEDiscovery {
   private onLostCallbacks: PeerCallback[] = [];
   private discoveredDevices: Map<string, BLEPeer> = new Map();
   private scanning = false;
+  private scanTimer: ReturnType<typeof setTimeout> | null = null;
   private localPhone = '';
   private localName = '';
 
@@ -84,14 +85,18 @@ export class BLEDiscovery {
         // Only accept devices with our prefix
         if (!device.name.startsWith(BLE_DEVICE_PREFIX)) return;
 
-        // Parse phone from device name: "SE-+919876543210-DisplayName"
-        const parts = device.name.substring(BLE_DEVICE_PREFIX.length).split('-');
-        if (parts.length < 1) return;
-        const phone = parts[0];
-        const name = parts.slice(1).join('-') || phone;
+        // Parse short ID from device name: "SX-1234"
+        // Device name only contains last 4 digits of phone for privacy
+        const shortId = device.name.substring(BLE_DEVICE_PREFIX.length);
+        if (!shortId) return;
 
-        // Skip self
-        if (phone === localPhone) return;
+        // Skip self (compare last 4 digits)
+        const localShortId = localPhone.slice(-4);
+        if (shortId === localShortId) return;
+
+        // Use short ID as phone placeholder until handshake provides full info
+        const phone = shortId;
+        const name = shortId;
 
         if (!this.discoveredDevices.has(device.id)) {
           const peer: BLEPeer = {id: device.id, phone, name};
@@ -102,9 +107,11 @@ export class BLEDiscovery {
     );
 
     // Stop and restart scan periodically to keep discovering
-    setTimeout(() => {
+    this.scanTimer = setTimeout(() => {
       if (this.scanning) {
         this.manager.stopDeviceScan();
+        this.scanTimer = null;
+        this.scanning = false;  // Reset before restart so startScanning doesn't bail out
         this.startScanning(localPhone, localName).catch(() => {});
       }
     }, 15000);
@@ -112,6 +119,10 @@ export class BLEDiscovery {
 
   stopScanning(): void {
     this.scanning = false;
+    if (this.scanTimer) {
+      clearTimeout(this.scanTimer);
+      this.scanTimer = null;
+    }
     this.manager.stopDeviceScan();
   }
 

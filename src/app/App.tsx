@@ -8,10 +8,14 @@ import {ThemeProvider, useThemeContext} from '../theme';
 import {AlertProvider} from '../components/ThemedAlert';
 import {getNotificationService} from '../notifications/NotificationService';
 import {scheduleWeeklyReminder} from '../notifications/WeeklyReminderScheduler';
+import {getTransactionDetector} from '../transaction/TransactionDetector';
+import {setupTransactionNotificationHandlers, navigateToQuickAdd} from '../transaction/TransactionNotificationHandler';
+import {navigationRef} from './NavigationRef';
 import NavigationRoot from './NavigationRoot';
 import SplashScreen from '../screens/SplashScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import {ErrorBoundary} from '../components/ErrorBoundary';
 
 type AppState = 'splash' | 'onboarding' | 'setup' | 'ready';
 
@@ -21,12 +25,35 @@ function AppContent() {
 
   useEffect(() => {
     if (appState !== 'ready') return;
+    let deepLinkTimer: ReturnType<typeof setTimeout> | null = null;
+    const isValidUuid = (s: string) => /^[a-f0-9-]{36}$/.test(s);
+
     const initNotifications = async () => {
       const svc = getNotificationService();
       await svc.initialize();
+      setupTransactionNotificationHandlers();
       await scheduleWeeklyReminder();
+
+      // Start transaction detector if enabled
+      if (getSetting('txn_detection_enabled') === 'true') {
+        getTransactionDetector().start();
+      }
+
+      // Check for pending deep link from background notification press
+      if (global.__pendingQuickAddTxnId && isValidUuid(global.__pendingQuickAddTxnId)) {
+        const id = global.__pendingQuickAddTxnId;
+        global.__pendingQuickAddTxnId = undefined;
+        deepLinkTimer = setTimeout(() => navigateToQuickAdd(id), 500);
+      } else {
+        global.__pendingQuickAddTxnId = undefined;
+      }
     };
     initNotifications().catch(() => {});
+
+    return () => {
+      if (deepLinkTimer) clearTimeout(deepLinkTimer);
+      getTransactionDetector().stop();
+    };
   }, [appState]);
 
   const handleSplashFinish = () => {
@@ -77,9 +104,11 @@ function AppContent() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
-      <NavigationRoot />
+      <ErrorBoundary>
+        <NavigationRoot />
+      </ErrorBoundary>
     </NavigationContainer>
   );
 }

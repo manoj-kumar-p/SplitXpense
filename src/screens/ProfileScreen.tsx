@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react';
-import {View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, ScrollView, FlatList} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, Switch, StyleSheet, ScrollView, FlatList, NativeModules, Linking} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ProfileStackParamList} from '../types/navigation';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -16,8 +17,12 @@ import {
   setThemePreference, type ThemePreference,
   isSyncNotificationsEnabled, setSyncNotificationsEnabled,
   isWeeklyReminderEnabled, setWeeklyReminderEnabled,
+  getSetting, setSetting,
 } from '../db/queries/settingsQueries';
 import {scheduleWeeklyReminder, cancelWeeklyReminder} from '../notifications/WeeklyReminderScheduler';
+import {getTransactionDetector} from '../transaction/TransactionDetector';
+import {isGmailConnected, initiateGmailAuth, disconnectGmail} from '../transaction/email/GmailAuth';
+import {isServerConfigured, setServerUrl as saveServerUrl, createAAConsent} from '../transaction/api/ServerSync';
 import {CURRENCIES} from '../utils/currencies';
 import {getAllPeers} from '../db/queries/syncQueries';
 import {isValidPhone, formatPhone} from '../utils/phone';
@@ -27,6 +32,8 @@ import type {LocalUser} from '../models/User';
 import type {Peer} from '../models/SyncOperation';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+
+const {TransactionNotificationModule} = NativeModules;
 
 dayjs.extend(relativeTime);
 
@@ -63,6 +70,14 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [syncNotifs, setSyncNotifs] = useState(true);
   const [weeklyReminder, setWeeklyReminder] = useState(true);
+  const [txnEnabled, setTxnEnabled] = useState(getSetting('txn_detection_enabled') === 'true');
+  const [notifListenerEnabled, setNotifListenerEnabled] = useState(false);
+  const [bgDetectionEnabled, setBgDetectionEnabled] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(isGmailConnected());
+  const [serverUrl, setServerUrlState] = useState(getSetting('server_url') || '');
+  const [aaStatus, setAaStatus] = useState(getSetting('aa_consent_status') || 'Not linked');
+  const [showServerUrlSheet, setShowServerUrlSheet] = useState(false);
+  const [serverUrlInput, setServerUrlInput] = useState('');
 
   useEffect(() => {
     const existing = getLocalUser();
@@ -77,10 +92,116 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
   useEffect(() => {
     setAutoSms(isAutoSmsEnabled());
     setDefaultCurrencyState(getDefaultCurrency());
-    setPeers(getAllPeers());
     setSyncNotifs(isSyncNotificationsEnabled());
     setWeeklyReminder(isWeeklyReminderEnabled());
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setPeers(getAllPeers());
+      if (TransactionNotificationModule?.isNotificationListenerEnabled) {
+        try {
+          const enabled = TransactionNotificationModule.isNotificationListenerEnabled();
+          if (typeof enabled === 'object' && typeof enabled.then === 'function') {
+            enabled.then((val: boolean) => setNotifListenerEnabled(val)).catch(() => setNotifListenerEnabled(false));
+          } else {
+            setNotifListenerEnabled(!!enabled);
+          }
+        } catch {
+          setNotifListenerEnabled(false);
+        }
+      }
+      NativeModules.TransactionWorkerModule?.isBackgroundCheckRunning()
+        .then((running: boolean) => setBgDetectionEnabled(running))
+        .catch(() => {});
+    }, []),
+  );
+
+  const toggleTxnDetection = (newVal: boolean) => {
+    setTxnEnabled(newVal);
+    setSetting('txn_detection_enabled', newVal ? 'true' : 'false');
+    const detector = getTransactionDetector();
+    if (newVal) {
+      detector.start();
+    } else {
+      detector.stop();
+    }
+  };
+
+  const toggleBgDetection = (val: boolean) => {
+    setBgDetectionEnabled(val);
+    if (val) {
+      NativeModules.TransactionWorkerModule?.startBackgroundCheck();
+    } else {
+      NativeModules.TransactionWorkerModule?.stopBackgroundCheck();
+    }
+  };
+
+  const openNotifListenerSettings = () => {
+    if (TransactionNotificationModule?.openNotificationListenerSettings) {
+      TransactionNotificationModule.openNotificationListenerSettings();
+    }
+  };
+
+  const handleGmailToggle = () => {
+    if (gmailConnected) {
+      showAlert({
+        title: 'Disconnect Gmail',
+        message: 'Stop reading bank transaction emails from Gmail?',
+        buttons: [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Disconnect',
+            style: 'destructive',
+            onPress: () => {
+              disconnectGmail();
+              setGmailConnected(false);
+            },
+          },
+        ],
+      });
+    } else {
+      try {
+        initiateGmailAuth();
+      } catch (err: any) {
+        showAlert({title: 'Gmail', message: err.message || 'Failed to start Gmail auth'});
+      }
+    }
+  };
+
+  const handleAASetup = async () => {
+    if (!serverUrl) {
+      showAlert({title: 'Server Required', message: 'Please configure the server URL first.'});
+      return;
+    }
+    if (!user?.phone_number) {
+      showAlert({title: 'Error', message: 'Phone number not set.'});
+      return;
+    }
+    try {
+      const result = await createAAConsent(user.phone_number);
+      setSetting('aa_consent_id', result.consentId);
+      setSetting('aa_consent_status', 'PENDING');
+      setAaStatus('PENDING');
+      if (result.redirectUrl) {
+        Linking.openURL(result.redirectUrl);
+      }
+    } catch (err: any) {
+      showAlert({title: 'AA Setup Failed', message: err.message || 'Could not create consent request.'});
+    }
+  };
+
+  const handleServerSetup = () => {
+    setServerUrlInput(serverUrl);
+    setShowServerUrlSheet(true);
+  };
+
+  const handleSaveServerUrl = () => {
+    const trimmed = serverUrlInput.trim().replace(/\/+$/, '');
+    saveServerUrl(trimmed);
+    setServerUrlState(trimmed);
+    setShowServerUrlSheet(false);
+  };
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -120,7 +241,8 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
       showAlert({title: 'Error', message: 'Please enter a valid phone number'});
       return;
     }
-    updateLocalUserPhone(normalized);
+    const oldPhone = user?.phone_number || '';
+    updateLocalUserPhone(oldPhone, normalized);
     setUser(prev => (prev ? {...prev, phone_number: normalized} : null));
     setPhone(normalized);
     setEditingPhone(false);
@@ -389,8 +511,8 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
             <Switch
               value={autoSms}
               onValueChange={handleToggleAutoSms}
-              trackColor={{false: colors.border, true: colors.accent}}
-              thumbColor={autoSms ? colors.text : colors.subtle}
+              trackColor={{false: colors.border, true: colors.text}}
+              thumbColor={colors.background}
             />
           }
         />
@@ -406,8 +528,8 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
             <Switch
               value={syncNotifs}
               onValueChange={handleToggleSyncNotifs}
-              trackColor={{false: colors.border, true: colors.accent}}
-              thumbColor={syncNotifs ? colors.text : colors.subtle}
+              trackColor={{false: colors.border, true: colors.text}}
+              thumbColor={colors.background}
             />
           }
         />
@@ -419,10 +541,81 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
             <Switch
               value={weeklyReminder}
               onValueChange={handleToggleWeeklyReminder}
-              trackColor={{false: colors.border, true: colors.accent}}
-              thumbColor={weeklyReminder ? colors.text : colors.subtle}
+              trackColor={{false: colors.border, true: colors.text}}
+              thumbColor={colors.background}
             />
           }
+        />
+      </AppCard>
+
+      {/* Transaction Detection Section */}
+      <SectionHeader title="TRANSACTION DETECTION" />
+      <AppCard noPadding>
+        <ListRow
+          icon="credit-card-search-outline"
+          label="Detect Transactions"
+          rightElement={
+            <Switch
+              value={txnEnabled}
+              onValueChange={toggleTxnDetection}
+              trackColor={{false: colors.border, true: colors.text}}
+              thumbColor={colors.background}
+            />
+          }
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="sync-circle"
+          label="Background Detection"
+          value={bgDetectionEnabled ? 'Active' : 'Off'}
+          rightElement={
+            <Switch
+              value={bgDetectionEnabled}
+              onValueChange={toggleBgDetection}
+              trackColor={{false: colors.border, true: colors.text}}
+              thumbColor={colors.background}
+            />
+          }
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="bell-badge-outline"
+          label="Notification Access"
+          value={notifListenerEnabled ? 'Enabled' : 'Disabled'}
+          onPress={openNotifListenerSettings}
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="gmail"
+          label="Connect Gmail"
+          value={gmailConnected ? 'Connected' : 'Not connected'}
+          onPress={handleGmailToggle}
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="link-variant"
+          label="Account Mappings"
+          onPress={() => navigation?.navigate('AccountMappings')}
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="bank-outline"
+          label="Bank Account (AA)"
+          value={aaStatus}
+          onPress={handleAASetup}
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="server-network"
+          label="Server URL"
+          value={serverUrl ? 'Connected' : 'Not set'}
+          onPress={handleServerSetup}
+        />
+        <Divider inset={spacing.base + 32 + spacing.md} />
+        <ListRow
+          icon="cloud-lock-outline"
+          label="Backup & Restore"
+          onPress={() => navigation?.navigate('Backup')}
         />
       </AppCard>
 
@@ -527,6 +720,29 @@ export default function ProfileScreen({onSetupComplete, navigation}: Props) {
     </ScrollView>
     {currencyPickerModal}
     {countryPickerModal}
+    <BottomSheet visible={showServerUrlSheet} onClose={() => setShowServerUrlSheet(false)} title="Server URL">
+      <Text style={{color: colors.textMuted, fontSize: fonts.sizes.sm, marginBottom: spacing.md}}>
+        Enter the URL of your SplitXpense server for AA bank statement sync and push notifications.
+      </Text>
+      <TextInput
+        style={[styles.searchInput, {backgroundColor: colors.surfaceElevated, color: colors.text}]}
+        placeholder="http://192.168.1.100:3000"
+        placeholderTextColor={colors.placeholder}
+        value={serverUrlInput}
+        onChangeText={setServerUrlInput}
+        autoFocus
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        onSubmitEditing={handleSaveServerUrl}
+      />
+      <TouchableOpacity
+        style={[styles.setupBtn, {backgroundColor: colors.text, marginTop: spacing.sm}]}
+        onPress={handleSaveServerUrl}
+        activeOpacity={0.8}>
+        <Text style={[styles.setupBtnText, {color: colors.background}]}>Save</Text>
+      </TouchableOpacity>
+    </BottomSheet>
   </>
   );
 }

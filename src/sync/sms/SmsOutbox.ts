@@ -3,6 +3,7 @@ import {
   getPendingSms,
   updateSmsStatus,
   incrementSmsRetry,
+  markSmsSequenceAcked,
 } from '../../db/queries/syncQueries';
 import {SMS_RATE_LIMIT_MS, SMS_MAX_RETRIES} from '../../constants/syncConstants';
 import {chunkPayload, messagesToRawTexts} from './SmsChunker';
@@ -77,13 +78,9 @@ export class SmsOutbox {
 
   /**
    * Mark all messages in a sequence as ACKed.
+   * Uses a direct SQL update instead of iterating all pending SMS in memory.
    */
   markAcked(sequenceId: string): void {
-    const pending = getPendingSms();
-    for (const entry of pending) {
-      if (entry.sequence_id === sequenceId) {
-        updateSmsStatus(entry.id, 'acked');
-      }
-    }
+    markSmsSequenceAcked(sequenceId);
   }
 }

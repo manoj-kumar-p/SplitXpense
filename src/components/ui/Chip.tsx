@@ -22,7 +22,8 @@ export function Chip({label, selected, onPress}: Props) {
         },
       ]}
       onPress={onPress}
-      activeOpacity={0.7}>
+      activeOpacity={0.7}
+      hitSlop={{top: 4, bottom: 4}}>
       <Text
         style={[
           styles.label,
@@ -40,6 +41,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: 20,
     borderWidth: 1,
+    minHeight: 36,
   },
   label: {
     fontSize: fonts.sizes.sm,

@@ -1,0 +1,25 @@
+{
+  "serviceName": "splitxpense-server",
+  "cluster": "splitxpense",
+  "taskDefinition": "splitxpense-server",
+  "desiredCount": 2,
+  "launchType": "FARGATE",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": ["SUBNET_1", "SUBNET_2"],
+      "securityGroups": ["SG_ID"],
+      "assignPublicIp": "ENABLED"
+    }
+  },
+  "loadBalancers": [
+    {
+      "targetGroupArn": "TARGET_GROUP_ARN",
+      "containerName": "splitxpense-server",
+      "containerPort": 3000
+    }
+  ],
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  }
+}

@@ -1,7 +1,7 @@
 import {Device} from 'react-native-ble-plx';
 import {CRDTEngine} from '../crdt/CRDTEngine';
 import {BLEDiscovery} from './BLEDiscovery';
-import {getVectorClock, updateVectorClock, updatePeerBleSync, upsertPeer} from '../../db/queries/syncQueries';
+import {getVectorClock, updateVectorClock, updatePeerBleSync, upsertPeer, getPeer} from '../../db/queries/syncQueries';
 import {getLocalUser} from '../../db/queries/userQueries';
 import {mergeVectorClocks} from '../crdt/VectorClock';
 import {
@@ -72,13 +72,13 @@ export class BLESyncManager {
       device = await this.discovery.connectToDevice(peer.id);
       upsertPeer(peer.phone, peer.name);
 
-      // 1. Send handshake with our vector clock
-      const myVC = getVectorClock(peer.phone);
+      // 1. Send handshake with a preliminary vector clock (may use truncated phone)
+      const prelimVC = getVectorClock(peer.phone);
       const handshakePayload = JSON.stringify({
         type: BLE_MSG.HANDSHAKE_REQ,
         phone: user.phone_number,
         name: user.display_name,
-        vc: myVC,
+        vc: prelimVC,
       });
 
       await this.writeChunked(device, handshakePayload);
@@ -91,7 +91,23 @@ export class BLESyncManager {
         throw new Error('Invalid handshake response');
       }
 
+      // Upsert peer with full phone from handshake before checking
+      const remotePhone = hsData.phone || '';
+      const remoteDisplay = hsData.name || peer.name || '';
+      if (!remotePhone) {
+        await this.discovery.disconnectDevice(peer.id);
+        return {success: false, operationsPushed: 0, operationsPulled: 0, error: 'Unknown peer'};
+      }
+      upsertPeer(remotePhone, remoteDisplay);
+      if (!getPeer(remotePhone)) {
+        await this.discovery.disconnectDevice(peer.id);
+        return {success: false, operationsPushed: 0, operationsPulled: 0, error: 'Unknown peer'};
+      }
+
       const remoteVC = hsData.vc || {};
+
+      // Re-fetch vector clock with the full remote phone (peer.phone may be truncated)
+      const myVC = getVectorClock(remotePhone);
 
       // 3. Pull - get their operations we haven't seen
       const pullReq = JSON.stringify({type: BLE_MSG.PULL_REQ, vc: myVC});
@@ -121,14 +137,14 @@ export class BLESyncManager {
       const ackData = JSON.parse(ackResponse);
       const pushed = ackData.type === BLE_MSG.PUSH_ACK ? (ackData.accepted || 0) : 0;
 
-      // 6. Update vector clocks
+      // 6. Update vector clocks (use remotePhone from handshake, not peer.phone which may be truncated)
       const mergedClock = mergeVectorClocks(myVC, remoteVC);
       for (const [origin, hlc] of Object.entries(mergedClock)) {
-        updateVectorClock(peer.phone, origin, hlc as string);
+        updateVectorClock(remotePhone, origin, hlc as string);
       }
-      updatePeerBleSync(peer.phone);
+      updatePeerBleSync(remotePhone);
 
-      notifySyncComplete('ble', pushed + pulled, peer.name).catch(() => {});
+      notifySyncComplete('ble', pushed + pulled, remoteDisplay || peer.name).catch(() => {});
       refreshWeeklyReminder().catch(() => {});
 
       // Disconnect
@@ -154,14 +170,13 @@ export class BLESyncManager {
    * Write data to the peer in chunks via BLE characteristic.
    */
   private async writeChunked(device: Device, data: string): Promise<void> {
-    const encoded = toBase64(data);
     const chunks: string[] = [];
 
-    for (let i = 0; i < encoded.length; i += CHUNK_SIZE) {
-      chunks.push(encoded.substring(i, i + CHUNK_SIZE));
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      chunks.push(data.substring(i, i + CHUNK_SIZE));
     }
 
-    // Send each chunk with type prefix
+    // Send each chunk with type prefix, base64-encoded for BLE transport
     for (let i = 0; i < chunks.length; i++) {
       const isLast = i === chunks.length - 1;
       const prefix = isLast ? BLE_MSG.CHUNK_END : BLE_MSG.CHUNK;
@@ -209,9 +224,8 @@ export class BLESyncManager {
             clearTimeout(timer);
             sub.remove();
 
-            const fullB64 = chunks.join('');
-            const decoded = fromBase64(fullB64);
-            resolve(decoded);
+            const fullPayload = chunks.join('');
+            resolve(fullPayload);
           } else if (type === BLE_MSG.ERROR) {
             clearTimeout(timer);
             sub.remove();

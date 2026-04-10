@@ -17,7 +17,7 @@ export async function scheduleWeeklyReminder(): Promise<void> {
   // Calculate next Sunday 10:00 AM
   const now = new Date();
   const nextSunday = new Date(now);
-  const daysUntilSunday = (7 - now.getDay()) % 7 || 7;
+  const daysUntilSunday = (7 - now.getDay()) % 7;
   nextSunday.setDate(now.getDate() + daysUntilSunday);
   nextSunday.setHours(10, 0, 0, 0);
 

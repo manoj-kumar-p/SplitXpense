@@ -17,7 +17,7 @@ interface Props {
 export function AppAvatar({name, size = 'sm', inverted}: Props) {
   const {colors} = useTheme();
   const dim = SIZES[size];
-  const initial = (name || '?').charAt(0).toUpperCase();
+  const initial = Array.from(name || '?')[0]?.toUpperCase() || '?';
 
   return (
     <View

@@ -13,6 +13,7 @@ export class WifiSyncManager {
   private crdtEngine: CRDTEngine;
   private autoSyncTimer: ReturnType<typeof setInterval> | null = null;
   private activePeers: Map<string, DiscoveredPeer> = new Map();
+  private syncing = false;
 
   constructor(crdtEngine: CRDTEngine) {
     this.client = new HttpSyncClient();
@@ -79,8 +80,14 @@ export class WifiSyncManager {
     if (this.autoSyncTimer) return;
 
     this.autoSyncTimer = setInterval(async () => {
-      for (const peer of this.activePeers.values()) {
-        await this.syncWithPeer(peer);
+      if (this.syncing) return;
+      this.syncing = true;
+      try {
+        for (const peer of this.activePeers.values()) {
+          await this.syncWithPeer(peer);
+        }
+      } finally {
+        this.syncing = false;
       }
     }, WIFI_SYNC_INTERVAL_MS);
   }

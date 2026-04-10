@@ -15,6 +15,7 @@ import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import {calculateGroupBalances} from '../utils/balance';
 import {formatCurrency, toPaisa} from '../utils/currency';
 import {triggerAutoSmsSync} from '../sync/AutoSmsSync';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import type {Debt} from '../utils/balance';
 
 interface GroupDebt {
@@ -116,13 +117,13 @@ export default function FriendsScreen() {
 
     showAlert({
       title: 'Settle Up',
-      message: `Record ${displayPayer} paying ${formatCurrency(absAmount)} to ${displayPayee} in "${groupName}"?`,
+      message: `Record ${displayPayer} paying ${formatCurrency(absAmount, getDefaultCurrency())} to ${displayPayee} in "${groupName}"?`,
       buttons: [
         {text: 'Cancel', style: 'cancel'},
         {
           text: 'Settle',
           onPress: () => {
-            const now = Date.now().toString();
+            const now = generateHlcTimestamp();
             createSettlement(groupId, paidBy, paidTo, absAmount, getDefaultCurrency(), new Date().toISOString(), now);
             triggerAutoSmsSync(groupId);
             setRefreshKey(k => k + 1);
@@ -144,7 +145,7 @@ export default function FriendsScreen() {
         <FlatList
           data={friends}
           keyExtractor={item => item.phone}
-          contentContainerStyle={{paddingBottom: spacing.base}}
+          contentContainerStyle={{paddingBottom: 80}}
           refreshControl={<RefreshControl refreshing={false} onRefresh={() => setRefreshKey(k => k + 1)} tintColor={colors.text} />}
           ListHeaderComponent={(() => {
             const overallNet = friends.reduce((sum, f) => sum + f.totalAmount, 0);
@@ -154,7 +155,7 @@ export default function FriendsScreen() {
             return (
               <View style={[styles.netBanner, {backgroundColor: tintColor + '10', borderColor: tintColor + '30'}]}>
                 <Text style={{fontSize: 13, color: tintColor, fontWeight: '600'}}>
-                  {isPositive ? `Overall, you are owed ${formatCurrency(overallNet)}` : `Overall, you owe ${formatCurrency(Math.abs(overallNet))}`}
+                  {isPositive ? `Overall, you are owed ${formatCurrency(overallNet, getDefaultCurrency())}` : `Overall, you owe ${formatCurrency(Math.abs(overallNet), getDefaultCurrency())}`}
                 </Text>
               </View>
             );
@@ -181,8 +182,8 @@ export default function FriendsScreen() {
                         owesYou ? styles.positive : styles.negative,
                       ]}>
                       {owesYou
-                        ? `owes you ${formatCurrency(item.totalAmount)}`
-                        : `you owe ${formatCurrency(Math.abs(item.totalAmount))}`}
+                        ? `owes you ${formatCurrency(item.totalAmount, getDefaultCurrency())}`
+                        : `you owe ${formatCurrency(Math.abs(item.totalAmount), getDefaultCurrency())}`}
                     </Text>
                   </View>
                   <Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={22} color={colors.textMuted} />
@@ -200,8 +201,8 @@ export default function FriendsScreen() {
                               g.amount > 0 ? styles.positive : styles.negative,
                             ]}>
                             {g.amount > 0
-                              ? `owes you ${formatCurrency(g.amount)}`
-                              : `you owe ${formatCurrency(Math.abs(g.amount))}`}
+                              ? `owes you ${formatCurrency(g.amount, getDefaultCurrency())}`
+                              : `you owe ${formatCurrency(Math.abs(g.amount), getDefaultCurrency())}`}
                           </Text>
                         </View>
                         <TouchableOpacity

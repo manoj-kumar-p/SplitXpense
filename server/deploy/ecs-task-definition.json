@@ -1,0 +1,45 @@
+{
+  "family": "splitxpense-server",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "splitxpense-server",
+      "image": "ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com/splitxpense:latest",
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/splitxpense",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "secrets": [
+        {"name": "SETU_AA_CLIENT_ID", "valueFrom": "arn:aws:ssm:ap-south-1:ACCOUNT_ID:parameter/splitxpense/setu-client-id"},
+        {"name": "SETU_AA_CLIENT_SECRET", "valueFrom": "arn:aws:ssm:ap-south-1:ACCOUNT_ID:parameter/splitxpense/setu-client-secret"},
+        {"name": "JWT_SECRET", "valueFrom": "arn:aws:ssm:ap-south-1:ACCOUNT_ID:parameter/splitxpense/jwt-secret"},
+        {"name": "DATABASE_URL", "valueFrom": "arn:aws:ssm:ap-south-1:ACCOUNT_ID:parameter/splitxpense/database-url"},
+        {"name": "REDIS_URL", "valueFrom": "arn:aws:ssm:ap-south-1:ACCOUNT_ID:parameter/splitxpense/redis-url"}
+      ],
+      "environment": [
+        {"name": "NODE_ENV", "value": "production"},
+        {"name": "PORT", "value": "3000"}
+      ]
+    }
+  ]
+}

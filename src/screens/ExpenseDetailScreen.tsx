@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import React, {useEffect, useState, useCallback, useRef} from 'react';
 import {View, Text, ScrollView, TouchableOpacity, StyleSheet} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -14,6 +14,8 @@ import {getGroupMembers} from '../db/queries/groupQueries';
 import {getLocalUser} from '../db/queries/userQueries';
 import {formatCurrency} from '../utils/currency';
 import {getCategoryByKey} from '../utils/expenseCategories';
+import {triggerAutoSmsSync} from '../sync/AutoSmsSync';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import dayjs from 'dayjs';
 import type {Expense, ExpenseSplit} from '../models/Expense';
 import type {GroupMember} from '../models/Group';
@@ -32,16 +34,17 @@ export default function ExpenseDetailScreen() {
   const [expense, setExpense] = useState<Expense | null>(null);
   const [splits, setSplits] = useState<ExpenseSplit[]>([]);
   const [members, setMembers] = useState<GroupMember[]>([]);
+  const localUserRef = useRef(getLocalUser());
 
   useEffect(() => {
+    localUserRef.current = getLocalUser();
     setExpense(getExpense(expenseId));
     setSplits(getExpenseSplits(expenseId));
     setMembers(getGroupMembers(groupId));
   }, [expenseId, groupId]);
 
   const getMemberName = (phone: string) => {
-    const localUser = getLocalUser();
-    if (phone === localUser?.phone_number) return 'You';
+    if (phone === localUserRef.current?.phone_number) return 'You';
     return members.find(m => m.phone_number === phone)?.display_name || phone;
   };
 
@@ -55,16 +58,17 @@ export default function ExpenseDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            const now = Date.now().toString();
+            const now = generateHlcTimestamp();
             deleteExpenseSplits(expenseId, now);
             deleteExpensePayers(expenseId, now);
             deleteExpense(expenseId, now);
+            triggerAutoSmsSync(groupId);
             navigation.goBack();
           },
         },
       ],
     });
-  }, [expense?.description, expenseId, navigation, showAlert]);
+  }, [expense?.description, expenseId, groupId, navigation, showAlert]);
 
   const handleEdit = useCallback(() => {
     navigation.navigate('AddExpense', {groupId, editExpenseId: expenseId});
@@ -109,7 +113,7 @@ export default function ExpenseDetailScreen() {
         <Text style={styles.description}>{expense.description}</Text>
         <Text style={styles.amount}>{formatCurrency(expense.amount, expense.currency)}</Text>
         {(() => {
-          const localUser = getLocalUser();
+          const localUser = localUserRef.current;
           const mySplit = localUser ? splits.find(s => s.phone_number === localUser.phone_number) : null;
           return mySplit ? (
             <Text style={{fontSize: 13, color: colors.textMuted, marginTop: spacing.xs}}>
@@ -126,7 +130,11 @@ export default function ExpenseDetailScreen() {
             <Icon name="account-outline" size={16} color={colors.text} />
           </View>
           <Text style={[styles.detailLabel, {color: colors.textMuted}]}>Paid by</Text>
-          <Text style={[styles.detailValue, {color: colors.text}]}>{getMemberName(expense.paid_by)}</Text>
+          <Text style={[styles.detailValue, {color: colors.text}]}>
+            {expense.paid_by.includes(',')
+              ? expense.paid_by.split(',').map(p => getMemberName(p.trim())).join(' & ')
+              : getMemberName(expense.paid_by)}
+          </Text>
         </View>
         <Divider inset={60} />
         <View style={styles.detailRow}>

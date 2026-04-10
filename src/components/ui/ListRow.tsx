@@ -21,12 +21,12 @@ export function ListRow({icon, label, value, onPress, rightElement}: Props) {
       <View style={[styles.iconWrap, {backgroundColor: colors.surfaceElevated}]}>
         <Icon name={icon} size={18} color={colors.text} />
       </View>
-      <Text style={[styles.label, {color: colors.text}]}>{label}</Text>
+      <Text style={[styles.label, {color: colors.text}]} numberOfLines={1}>{label}</Text>
       <View style={styles.right}>
         {rightElement || (
           <>
             {value ? (
-              <Text style={[styles.value, {color: colors.textMuted}]}>
+              <Text style={[styles.value, {color: colors.textMuted}]} numberOfLines={1}>
                 {value}
               </Text>
             ) : null}

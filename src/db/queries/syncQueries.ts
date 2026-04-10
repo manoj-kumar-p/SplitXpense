@@ -74,7 +74,11 @@ export function updateVectorClock(peerPhone: string, originPhone: string, hlcVal
   const db = getDatabase();
   const now = new Date().toISOString();
   db.executeSync(
-    'INSERT OR REPLACE INTO vector_clocks (peer_phone, origin_phone, hlc_value, updated_at) VALUES (?, ?, ?, ?);',
+    `INSERT INTO vector_clocks (peer_phone, origin_phone, hlc_value, updated_at)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(peer_phone, origin_phone) DO UPDATE SET
+  hlc_value = CASE WHEN excluded.hlc_value > vector_clocks.hlc_value THEN excluded.hlc_value ELSE vector_clocks.hlc_value END,
+  updated_at = excluded.updated_at;`,
     [peerPhone, originPhone, hlcValue, now],
   );
 }
@@ -223,5 +227,17 @@ export function markFragmentsReassembled(senderPhone: string, sequenceId: string
   db.executeSync(
     'UPDATE sms_inbox_fragments SET reassembled = 1 WHERE sender_phone = ? AND sequence_id = ?;',
     [senderPhone, sequenceId],
+  );
+}
+
+/**
+ * Mark all SMS outbox entries for a sequence as acked directly via SQL,
+ * instead of iterating all pending entries in memory.
+ */
+export function markSmsSequenceAcked(sequenceId: string): void {
+  const db = getDatabase();
+  db.executeSync(
+    `UPDATE sms_outbox SET status = 'acked', acked_at = ? WHERE sequence_id = ? AND status IN ('pending', 'sending', 'sent');`,
+    [new Date().toISOString(), sequenceId],
   );
 }

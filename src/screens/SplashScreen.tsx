@@ -26,7 +26,7 @@ export default function SplashScreen({onFinish}: Props) {
   const splitAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    const entryAnim = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 400,
@@ -38,17 +38,25 @@ export default function SplashScreen({onFinish}: Props) {
         friction: 8,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      Animated.spring(splitAnim, {
-        toValue: 1,
-        tension: 25,
-        friction: 12,
-        useNativeDriver: true,
-      }).start();
+    ]);
+
+    const splitAnimation = Animated.spring(splitAnim, {
+      toValue: 1,
+      tension: 25,
+      friction: 12,
+      useNativeDriver: true,
+    });
+
+    entryAnim.start(() => {
+      splitAnimation.start();
     });
 
     const timer = setTimeout(onFinish, 2200);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      entryAnim.stop();
+      splitAnimation.stop();
+    };
   }, []);
 
   const leftX = splitAnim.interpolate({

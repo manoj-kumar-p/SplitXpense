@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, PermissionsAndroid, Platform} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, FlatList, Modal, PermissionsAndroid, Platform, KeyboardAvoidingView, ScrollView} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import Contacts from 'react-native-contacts';
@@ -11,6 +11,7 @@ import {fonts} from '../theme/fonts';
 import {spacing} from '../theme/spacing';
 import {addGroupMember} from '../db/queries/groupQueries';
 import {upsertKnownUser, getLocalUser} from '../db/queries/userQueries';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import {isValidPhone} from '../utils/phone';
 import {COUNTRY_CODES, type CountryCode} from '../utils/countryCodes';
 import type {GroupsStackParamList} from '../types/navigation';
@@ -114,7 +115,7 @@ export default function AddMemberScreen() {
     const user = getLocalUser();
     if (!user) return;
 
-    const now = Date.now().toString();
+    const now = generateHlcTimestamp();
 
     upsertKnownUser(normalized, name.trim(), now);
     addGroupMember(groupId, normalized, name.trim(), user.phone_number, now);
@@ -133,7 +134,8 @@ export default function AddMemberScreen() {
   const styles = makeStyles(colors);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView keyboardShouldPersistTaps="handled" style={styles.container} contentContainerStyle={{paddingBottom: 40}}>
       {/* Pick from Contacts */}
       <TouchableOpacity style={styles.contactButton} onPress={handlePickContact} activeOpacity={0.7}>
         <Icon name="contacts" size={22} color={colors.text} />
@@ -265,7 +267,8 @@ export default function AddMemberScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -331,13 +334,13 @@ const makeStyles = (colors: any) =>
       width: 36,
       height: 4,
       borderRadius: 2,
-      backgroundColor: '#CCC',
+      backgroundColor: colors.handleBar,
       alignSelf: 'center',
       marginBottom: spacing.md,
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.modalOverlay,
       justifyContent: 'flex-end',
     },
     modalContent: {

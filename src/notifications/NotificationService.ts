@@ -1,6 +1,6 @@
 import notifee, {AndroidImportance} from '@notifee/react-native';
 import {Platform, PermissionsAndroid} from 'react-native';
-import {CHANNEL_SYNC, CHANNEL_REMINDERS} from './notificationConstants';
+import {CHANNEL_SYNC, CHANNEL_REMINDERS, CHANNEL_TRANSACTIONS} from './notificationConstants';
 
 class NotificationService {
   private initialized = false;
@@ -19,6 +19,13 @@ class NotificationService {
       id: CHANNEL_REMINDERS,
       name: 'Weekly Reminders',
       description: 'Weekly reminder of outstanding debts',
+      importance: AndroidImportance.HIGH,
+    });
+
+    await notifee.createChannel({
+      id: CHANNEL_TRANSACTIONS,
+      name: 'Transaction Alerts',
+      description: 'Notifications for detected spending transactions',
       importance: AndroidImportance.HIGH,
     });
 

@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS groups (
   id            TEXT PRIMARY KEY,
   name          TEXT NOT NULL,
   description   TEXT DEFAULT '',
+  icon          TEXT DEFAULT '',
+  simplify_debts INTEGER NOT NULL DEFAULT 1,
+  delete_votes  TEXT DEFAULT '',
   created_by    TEXT NOT NULL,
   hlc_timestamp TEXT NOT NULL,
   is_deleted    INTEGER NOT NULL DEFAULT 0,
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   currency      TEXT NOT NULL DEFAULT 'INR',
   paid_by       TEXT NOT NULL,
   split_type    TEXT NOT NULL CHECK(split_type IN ('equal','shares','percentage','exact')),
+  category      TEXT DEFAULT 'general',
   expense_date  TEXT NOT NULL,
   hlc_timestamp TEXT NOT NULL,
   is_deleted    INTEGER NOT NULL DEFAULT 0,
@@ -86,7 +90,7 @@ CREATE TABLE IF NOT EXISTS settlements (
   group_id      TEXT NOT NULL REFERENCES groups(id),
   paid_by       TEXT NOT NULL,
   paid_to       TEXT NOT NULL,
-  amount        INTEGER NOT NULL,
+  amount        INTEGER NOT NULL CHECK(amount > 0),
   currency      TEXT NOT NULL DEFAULT 'INR',
   settled_at    TEXT NOT NULL,
   hlc_timestamp TEXT NOT NULL,
@@ -167,5 +171,36 @@ CREATE TABLE IF NOT EXISTS peers (
 CREATE TABLE IF NOT EXISTS app_settings (
   key             TEXT PRIMARY KEY,
   value           TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pending_transactions (
+  id               TEXT PRIMARY KEY,
+  source           TEXT NOT NULL CHECK(source IN ('sms','notification','email','api')),
+  raw_text         TEXT NOT NULL,
+  amount           INTEGER NOT NULL,
+  currency         TEXT NOT NULL DEFAULT 'INR',
+  merchant         TEXT DEFAULT '',
+  note             TEXT DEFAULT '',
+  payment_mode     TEXT DEFAULT '' CHECK(payment_mode IN ('','upi','debit_card','credit_card','net_banking','wallet')),
+  instrument_id    TEXT DEFAULT '',
+  transaction_type TEXT NOT NULL CHECK(transaction_type IN ('debit','credit')),
+  detected_at      TEXT NOT NULL,
+  dedup_key        TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'pending'
+                   CHECK(status IN ('pending','added','dismissed')),
+  mapped_group_id  TEXT DEFAULT '',
+  created_at       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_txn_dedup ON pending_transactions(dedup_key);
+CREATE INDEX IF NOT EXISTS idx_pending_txn_status ON pending_transactions(status);
+
+CREATE TABLE IF NOT EXISTS account_group_map (
+  instrument_id   TEXT PRIMARY KEY,
+  instrument_type TEXT NOT NULL CHECK(instrument_type IN ('account','debit_card','credit_card','upi','wallet')),
+  group_id        TEXT NOT NULL REFERENCES groups(id),
+  label           TEXT DEFAULT '',
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
 );
 `;

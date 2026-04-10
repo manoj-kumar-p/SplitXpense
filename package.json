@@ -30,6 +30,9 @@
     "react-native-tcp-socket": "^6.4.1",
     "react-native-vector-icons": "^10.3.0",
     "react-native-zeroconf": "^0.14.0",
+    "scrypt-js": "^3.0.1",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
     "uuid": "^13.0.0",
     "zustand": "^5.0.11"
   },

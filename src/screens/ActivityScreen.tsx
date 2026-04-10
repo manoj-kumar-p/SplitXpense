@@ -79,8 +79,8 @@ export default function ActivityScreen() {
             category: exp.category,
             myShare: mySplit ? mySplit.amount : 0,
             icon: cat.icon,
-            iconColor: colors.text,
-            iconBg: colors.surfaceElevated,
+            iconColor: '',
+            iconBg: '',
           });
         }
 
@@ -101,15 +101,15 @@ export default function ActivityScreen() {
             createdAt: sett.created_at,
             myShare: 0,
             icon: 'handshake-outline',
-            iconColor: colors.positive,
-            iconBg: colors.positive + '15',
+            iconColor: '',
+            iconBg: '',
           });
         }
       }
 
-      items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      items.sort((a, b) => (b.date || b.createdAt).localeCompare(a.date || a.createdAt));
       setActivities(items);
-    }, [colors, refreshKey]),
+    }, [refreshKey]),
   );
 
   // Group activities into sections by date
@@ -132,10 +132,12 @@ export default function ActivityScreen() {
 
   const renderItem = ({item, index}: {item: ActivityItem; index: number}) => {
     const isSettlement = item.type === 'settlement';
+    const iconBg = isSettlement ? colors.positive + '15' : colors.surfaceElevated;
+    const iconColor = isSettlement ? colors.positive : colors.text;
     const content = (
       <View style={styles.activityRow}>
-        <View style={[styles.iconContainer, {backgroundColor: item.iconBg}]}>
-          <Icon name={item.icon} size={18} color={item.iconColor} />
+        <View style={[styles.iconContainer, {backgroundColor: iconBg}]}>
+          <Icon name={item.icon} size={18} color={iconColor} />
         </View>
         <View style={styles.activityInfo}>
           <Text style={styles.activityDesc} numberOfLines={1}>
@@ -192,6 +194,7 @@ export default function ActivityScreen() {
           renderSectionHeader={({section: {title}}) => (
             <SectionHeader title={title} />
           )}
+          contentContainerStyle={{paddingBottom: 80}}
           refreshControl={<RefreshControl refreshing={false} onRefresh={() => setRefreshKey(k => k + 1)} tintColor={colors.text} />}
           showsVerticalScrollIndicator={false}
           stickySectionHeadersEnabled={false}

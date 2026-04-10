@@ -103,8 +103,7 @@ const makeStyles = (colors: any) =>
     },
     body: {
       fontSize: fonts.sizes.base,
-      color: colors.text,
+      color: colors.textSecondary,
       lineHeight: 22,
-      opacity: 0.8,
     },
   });

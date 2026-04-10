@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {View, Text, TextInput, StyleSheet, type KeyboardTypeOptions} from 'react-native';
 import {useTheme} from '../../theme';
 import {fonts} from '../../theme/fonts';
@@ -15,6 +15,7 @@ interface Props {
   numberOfLines?: number;
   autoFocus?: boolean;
   leftElement?: React.ReactNode;
+  secureTextEntry?: boolean;
 }
 
 export function AppInput({
@@ -27,8 +28,10 @@ export function AppInput({
   numberOfLines,
   autoFocus,
   leftElement,
+  secureTextEntry,
 }: Props) {
   const {colors} = useTheme();
+  const [focused, setFocused] = useState(false);
 
   return (
     <View>
@@ -38,6 +41,7 @@ export function AppInput({
           styles.inputWrapper,
           {backgroundColor: colors.surface, borderColor: colors.border},
           multiline && styles.multiline,
+          focused && {borderColor: colors.text},
         ]}>
         {leftElement}
         <TextInput
@@ -54,6 +58,9 @@ export function AppInput({
           multiline={multiline}
           numberOfLines={numberOfLines}
           autoFocus={autoFocus}
+          secureTextEntry={secureTextEntry}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </View>
     </View>

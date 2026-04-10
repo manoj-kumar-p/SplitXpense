@@ -246,7 +246,7 @@ export default function OnboardingScreen({onFinish}: Props) {
 
       {/* Buttons */}
       <View style={styles.footer}>
-        <TouchableOpacity onPress={onFinish}>
+        <TouchableOpacity onPress={onFinish} hitSlop={{top: 12, bottom: 12, left: 12, right: 12}} style={{padding: 12}}>
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
 

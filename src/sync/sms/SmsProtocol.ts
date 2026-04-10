@@ -28,13 +28,19 @@ export function decodeSmsMessage(raw: string): SmsMessage | null {
   if (!raw.startsWith(SMS_PROTOCOL_PREFIX)) return null;
   if (raw.length < HEADER_LENGTH) return null;
 
+  const checksum = raw.substring(8, 10);
+  const payload = raw.substring(HEADER_LENGTH);
+
+  const computedChecksum = computeChecksum(payload);
+  if (computedChecksum !== checksum) return null;
+
   return {
     type: raw[3] as MessageType,
     sequenceId: raw.substring(4, 8),
-    checksum: raw.substring(8, 10),
+    checksum,
     chunkIndex: parseInt(raw.substring(10, 12), 36),
     totalChunks: parseInt(raw.substring(12, 14), 36),
-    payload: raw.substring(HEADER_LENGTH),
+    payload,
   };
 }
 

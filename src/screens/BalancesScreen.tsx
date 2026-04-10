@@ -12,6 +12,7 @@ import {getGroupExpenses, getExpenseSplits, getExpensePayers} from '../db/querie
 import {getGroupSettlements} from '../db/queries/settlementQueries';
 import {calculateGroupBalances} from '../utils/balance';
 import {formatCurrency} from '../utils/currency';
+import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import type {Debt} from '../utils/balance';
 
 interface DebtWithNames extends Debt {
@@ -91,7 +92,7 @@ export default function BalancesScreen() {
             netBalance !== 0 ? (
               <View style={[styles.netCard, {backgroundColor: (netBalance > 0 ? colors.positive : colors.negative) + '10', borderColor: (netBalance > 0 ? colors.positive : colors.negative) + '30'}]}>
                 <Text style={{fontSize: 13, fontWeight: '600', color: netBalance > 0 ? colors.positive : colors.negative}}>
-                  {netBalance > 0 ? `Overall, you are owed ${formatCurrency(netBalance)}` : `Overall, you owe ${formatCurrency(Math.abs(netBalance))}`}
+                  {netBalance > 0 ? `Overall, you are owed ${formatCurrency(netBalance, getDefaultCurrency())}` : `Overall, you owe ${formatCurrency(Math.abs(netBalance), getDefaultCurrency())}`}
                 </Text>
               </View>
             ) : null
@@ -114,11 +115,12 @@ export default function BalancesScreen() {
                 </View>
                 <Icon name="arrow-right" size={14} color={colors.textMuted} style={{marginHorizontal: spacing.sm}} />
                 <Text style={[styles.debtAmount, {color: amtColor}]}>
-                  {formatCurrency(item.amount)}
+                  {formatCurrency(item.amount, getDefaultCurrency())}
                 </Text>
               </View>
             );
           }}
+          contentContainerStyle={{paddingBottom: 80}}
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
         />

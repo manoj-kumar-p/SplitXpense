@@ -36,7 +36,17 @@
       "Bash(find \"E:/Split Tracker/android/src\" -type f -name \"*.ts\" -o -name \"*.tsx\" 2>/dev/null | sort)",
       "Bash(find \"E:/Split Tracker/src\" -type f -name \"*.ts\" -o -name \"*.tsx\" 2>/dev/null | sort)",
       "Bash(cd \"E:/Split Tracker/android\" && ./gradlew assembleDebug 2>&1 | tail -15)",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(cd \"E:/Split Tracker\" && gh repo create SplitXpense --public --source=. --remote=origin --push 2>&1)",
+      "Bash($ANDROID_HOME/emulator/emulator -list-avds 2>&1)",
+      "Bash(sleep:*)",
+      "Bash(find '/e/Split Tracker/src' -type f -name *.ts -o -name *.tsx -o -name *.js)",
+      "Bash(grep -r \"setSender\\\\|SmsSender\" '/e/Split Tracker/src' --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn \"mainActivity\\\\|MainActivity\" '/e/Split Tracker/android' --include=*.java --include=*.kt)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(./gradlew assembleDebug --stacktrace)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(ls *.config.js .babelrc* babel.config.*)"
     ]
   }
 }

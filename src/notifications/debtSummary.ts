@@ -46,11 +46,21 @@ export function computeDebtSummary(): DebtSummary {
 
 export function formatDebtNotificationBody(): string | null {
   const summary = computeDebtSummary();
-  if (summary.totalOwed <= 0) return null;
-
   const currency = getDefaultCurrency();
-  const formatted = formatCurrency(summary.totalOwed, currency);
-  const groupWord = summary.groupsInDebt === 1 ? 'group' : 'groups';
 
-  return `You owe ${formatted} across ${summary.groupsInDebt} ${groupWord}`;
+  if (summary.totalOwed > 0 && summary.totalOwedToUser > 0) {
+    const owedFormatted = formatCurrency(summary.totalOwed, currency);
+    const owedToYouFormatted = formatCurrency(summary.totalOwedToUser, currency);
+    const groupWord = summary.groupsInDebt === 1 ? 'group' : 'groups';
+    return `You owe ${owedFormatted} across ${summary.groupsInDebt} ${groupWord}. Others owe you ${owedToYouFormatted}.`;
+  } else if (summary.totalOwed > 0) {
+    const formatted = formatCurrency(summary.totalOwed, currency);
+    const groupWord = summary.groupsInDebt === 1 ? 'group' : 'groups';
+    return `You owe ${formatted} across ${summary.groupsInDebt} ${groupWord}`;
+  } else if (summary.totalOwedToUser > 0) {
+    const formatted = formatCurrency(summary.totalOwedToUser, currency);
+    return `Others owe you ${formatted}`;
+  }
+
+  return null;
 }

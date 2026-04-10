@@ -1,6 +1,7 @@
 import React from 'react';
 import {Text, StyleSheet} from 'react-native';
 import {useTheme} from '../../theme';
+import {fonts} from '../../theme/fonts';
 import {spacing} from '../../theme/spacing';
 
 interface Props {
@@ -16,7 +17,7 @@ export function SectionHeader({title}: Props) {
 
 const styles = StyleSheet.create({
   header: {
-    fontSize: 11,
+    fontSize: fonts.sizes.xs,
     fontWeight: '600',
     letterSpacing: 1,
     marginBottom: spacing.sm,

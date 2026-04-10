@@ -1,5 +1,6 @@
 import {getDatabase} from '../database';
 import {generateId} from '../../utils/uuid';
+import {logInsert, logDelete} from '../../sync/syncLogger';
 import type {Settlement} from '../../models/Settlement';
 
 export function getGroupSettlements(groupId: string): Settlement[] {
@@ -29,6 +30,8 @@ export function createSettlement(
     [id, groupId, paidBy, paidTo, amount, currency, settledAt, hlcTimestamp, now, now],
   );
 
+  logInsert('settlements', id, hlcTimestamp);
+
   return {
     id, group_id: groupId, paid_by: paidBy, paid_to: paidTo, amount, currency,
     settled_at: settledAt, hlc_timestamp: hlcTimestamp, is_deleted: 0,
@@ -43,4 +46,6 @@ export function deleteSettlement(id: string, hlcTimestamp: string): void {
     'UPDATE settlements SET is_deleted = 1, hlc_timestamp = ?, updated_at = ? WHERE id = ?;',
     [hlcTimestamp, now, id],
   );
+
+  logDelete('settlements', id, hlcTimestamp);
 }

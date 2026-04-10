@@ -12,12 +12,14 @@ export function FadeInView({index, children, delay = 50, style}: Props) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(anim, {
+    const animation = Animated.timing(anim, {
       toValue: 1,
       duration: 300,
       delay: index * delay,
       useNativeDriver: true,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, []);
 
   return (

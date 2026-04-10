@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, TouchableOpacity, Modal, StyleSheet} from 'react-native';
+import {View, Text, TouchableOpacity, TouchableWithoutFeedback, Pressable, Modal, StyleSheet} from 'react-native';
 import {useTheme} from '../../theme';
 import {fonts} from '../../theme/fonts';
 import {spacing} from '../../theme/spacing';
@@ -16,20 +16,22 @@ export function BottomSheet({visible, onClose, title, children}: Props) {
   const {colors} = useTheme();
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={[styles.overlay, {backgroundColor: colors.modalOverlay}]}>
-        <View style={[styles.content, {backgroundColor: colors.surface}]}>
-          <View style={[styles.handle, {backgroundColor: colors.handleBar}]} />
-          {title && (
-            <Text style={[styles.title, {color: colors.text}]}>{title}</Text>
-          )}
-          {children}
-          <TouchableOpacity style={styles.cancel} onPress={onClose}>
-            <Text style={[styles.cancelText, {color: colors.textMuted}]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={[styles.overlay, {backgroundColor: colors.modalOverlay}]}>
+          <Pressable style={[styles.content, {backgroundColor: colors.surface}]} onPress={() => {}}>
+              <View style={[styles.handle, {backgroundColor: colors.handleBar}]} />
+              {title && (
+                <Text style={[styles.title, {color: colors.text}]}>{title}</Text>
+              )}
+              {children}
+              <TouchableOpacity style={styles.cancel} onPress={onClose}>
+                <Text style={[styles.cancelText, {color: colors.textMuted}]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, {useRef} from 'react';
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   ActivityIndicator,
   StyleSheet,
+  Animated,
   type ViewStyle,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -34,6 +35,7 @@ export function AppButton({
   style,
 }: Props) {
   const {colors} = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
 
   const bg: Record<Variant, string> = {
     primary: colors.text,
@@ -56,29 +58,51 @@ export function AppButton({
     outline: colors.border,
   };
 
+  const onPressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        {
-          backgroundColor: bg[variant],
-          borderColor: borderColor[variant],
-          opacity: disabled ? 0.5 : 1,
-        },
-        style,
-      ]}
+    <Pressable
       onPress={onPress}
-      activeOpacity={0.7}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={disabled || loading}>
-      {loading ? (
-        <ActivityIndicator size="small" color={fg[variant]} />
-      ) : (
-        <>
-          {icon && <Icon name={icon} size={20} color={fg[variant]} />}
-          <Text style={[styles.text, {color: fg[variant]}]}>{title}</Text>
-        </>
-      )}
-    </TouchableOpacity>
+      <Animated.View
+        style={[
+          styles.button,
+          {
+            backgroundColor: bg[variant],
+            borderColor: borderColor[variant],
+            opacity: disabled ? 0.5 : 1,
+            transform: [{scale}],
+          },
+          style,
+        ]}>
+        {loading ? (
+          <ActivityIndicator size="small" color={fg[variant]} />
+        ) : (
+          <>
+            {icon && <Icon name={icon} size={20} color={fg[variant]} />}
+            <Text style={[styles.text, {color: fg[variant]}]}>{title}</Text>
+          </>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 

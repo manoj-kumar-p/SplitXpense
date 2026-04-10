@@ -11,6 +11,7 @@ import {getLocalUser} from '../db/queries/userQueries';
 import {getAllGroups} from '../db/queries/groupQueries';
 import {getGroupExpenses, getExpenseSplits, getExpensePayers} from '../db/queries/expenseQueries';
 import {formatCurrency} from '../utils/currency';
+import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import {getCategoryByKey} from '../utils/expenseCategories';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
@@ -130,6 +131,7 @@ export default function StatsScreen() {
         let groupCount = 0;
 
         for (const exp of expenses) {
+          if (!exp.expense_date) continue;
           if (exp.expense_date < startStr || exp.expense_date > endStr) continue;
 
           // Calculate your share of the expense
@@ -213,19 +215,20 @@ export default function StatsScreen() {
       <View style={styles.navRow}>
         {period !== 'custom' ? (
           <>
-            <TouchableOpacity style={styles.navArrow} onPress={() => handleNavigate(-1)}>
+            <TouchableOpacity style={styles.navArrow} activeOpacity={0.7} onPress={() => handleNavigate(-1)}>
               <Icon name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={[styles.navLabel, {color: colors.text}]}>{periodLabel}</Text>
             <TouchableOpacity
               style={[styles.navArrow, !canGoForward && {opacity: 0.3}]}
+              activeOpacity={0.7}
               onPress={() => canGoForward && handleNavigate(1)}
               disabled={!canGoForward}>
               <Icon name="chevron-right" size={24} color={colors.text} />
             </TouchableOpacity>
           </>
         ) : (
-          <TouchableOpacity style={styles.customRangeBtn} onPress={() => setShowCustomPicker(true)}>
+          <TouchableOpacity style={styles.customRangeBtn} activeOpacity={0.7} onPress={() => setShowCustomPicker(true)}>
             <Icon name="calendar-range" size={18} color={colors.text} />
             <Text style={[styles.navLabel, {color: colors.text}]}>{periodLabel}</Text>
             <Icon name="pencil-outline" size={14} color={colors.textMuted} />
@@ -242,6 +245,7 @@ export default function StatsScreen() {
             <Text style={[styles.dateLabel, {color: colors.textMuted}]}>From</Text>
             <TouchableOpacity
               style={[styles.datePickerBtn, {borderColor: colors.border}]}
+              activeOpacity={0.7}
               onPress={() => openDatePicker('start')}>
               <Icon name="calendar-outline" size={18} color={colors.text} />
               <Text style={[styles.datePickerText, {color: colors.text}]}>
@@ -252,6 +256,7 @@ export default function StatsScreen() {
             <Text style={[styles.dateLabel, {color: colors.textMuted}]}>To</Text>
             <TouchableOpacity
               style={[styles.datePickerBtn, {borderColor: colors.border}]}
+              activeOpacity={0.7}
               onPress={() => openDatePicker('end')}>
               <Icon name="calendar-outline" size={18} color={colors.text} />
               <Text style={[styles.datePickerText, {color: colors.text}]}>
@@ -262,11 +267,13 @@ export default function StatsScreen() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalBtn, {borderColor: colors.border}]}
+                activeOpacity={0.7}
                 onPress={() => setShowCustomPicker(false)}>
                 <Text style={{color: colors.text, fontWeight: '600'}}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, {backgroundColor: colors.primary}]}
+                activeOpacity={0.7}
                 onPress={() => setShowCustomPicker(false)}>
                 <Text style={{color: colors.textInverse, fontWeight: '600'}}>Apply</Text>
               </TouchableOpacity>
@@ -299,7 +306,7 @@ export default function StatsScreen() {
       {/* Total spent card */}
       <AppCard style={styles.totalCard}>
         <Text style={[styles.totalLabel, {color: colors.textMuted}]}>Your Spend</Text>
-        <Text style={[styles.totalValue, {color: colors.text}]}>{formatCurrency(totalSpent)}</Text>
+        <Text style={[styles.totalValue, {color: colors.text}]}>{formatCurrency(totalSpent, getDefaultCurrency())}</Text>
         <Text style={[styles.totalCount, {color: colors.textMuted}]}>{expenseCount} expense{expenseCount !== 1 ? 's' : ''}</Text>
       </AppCard>
 
@@ -316,7 +323,7 @@ export default function StatsScreen() {
                   <View style={{flex: 1}}>
                     <View style={styles.catHeader}>
                       <Text style={[styles.catLabel, {color: colors.text}]}>{cat.label}</Text>
-                      <Text style={[styles.catAmount, {color: colors.text}]}>{formatCurrency(cat.total)}</Text>
+                      <Text style={[styles.catAmount, {color: colors.text}]}>{formatCurrency(cat.total, getDefaultCurrency())}</Text>
                     </View>
                     <View style={styles.barBg}>
                       <View
@@ -351,7 +358,7 @@ export default function StatsScreen() {
                     <View style={{flex: 1}}>
                       <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4}}>
                         <Text style={[styles.catLabel, {color: colors.text}]}>{grp.name}</Text>
-                        <Text style={[styles.catAmount, {color: colors.text}]}>{formatCurrency(grp.total)}</Text>
+                        <Text style={[styles.catAmount, {color: colors.text}]}>{formatCurrency(grp.total, getDefaultCurrency())}</Text>
                       </View>
                       <View style={styles.barBg}>
                         <View style={[styles.barFill, {width: `${Math.max(3, (grp.total / maxGrpTotal) * 100)}%`, backgroundColor: colors.primary}]} />
@@ -408,7 +415,7 @@ const makeStyles = (colors: any) =>
       gap: spacing.md,
     },
     navArrow: {
-      padding: spacing.xs,
+      padding: spacing.md,
     },
     navLabel: {
       fontSize: fonts.sizes.base,
@@ -427,7 +434,7 @@ const makeStyles = (colors: any) =>
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.modalOverlay,
       justifyContent: 'center',
       padding: spacing.xl,
     },

@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, FlatList, KeyboardAvoidingView, Platform} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
@@ -17,6 +17,7 @@ import {toPaisa, fromPaisa} from '../utils/currency';
 import {CURRENCIES} from '../utils/currencies';
 import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import {triggerAutoSmsSync} from '../sync/AutoSmsSync';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import {EXPENSE_CATEGORIES, getCategoryByKey} from '../utils/expenseCategories';
 import type {GroupMember} from '../models/Group';
 import type {SplitType} from '../models/Expense';
@@ -146,8 +147,17 @@ export default function AddExpenseScreen() {
       return;
     }
 
-    const now = Date.now().toString();
+    const now = generateHlcTimestamp();
     const totalPaisa = toPaisa(amountNum);
+
+    if (totalPaisa <= 0) {
+      showAlert({title: 'Error', message: 'Amount too small'});
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // ALL VALIDATION FIRST (before any DB mutations)
+    // -----------------------------------------------------------------------
 
     // Determine paidBy string
     let paidByStr: string;
@@ -171,7 +181,32 @@ export default function AddExpenseScreen() {
       paidByStr = singlePayer;
     }
 
-    // Determine expense ID (existing or new)
+    // Validate percentage split sums to 100%
+    if (splitType === 'percentage') {
+      const totalPct = selectedMembers.reduce(
+        (sum, phone) => sum + (parseFloat(splitValues[phone] || '0') || 0), 0,
+      );
+      if (Math.abs(totalPct - 100) > 0.01) {
+        showAlert({title: 'Error', message: `Percentages add up to ${totalPct.toFixed(1)}%, not 100%`});
+        return;
+      }
+    }
+
+    // Validate exact split sums to total
+    if (splitType === 'exact') {
+      const exactTotal = selectedMembers.reduce(
+        (sum, phone) => sum + toPaisa(parseFloat(splitValues[phone] || '0') || 0), 0,
+      );
+      if (Math.abs(exactTotal - totalPaisa) > 1) {
+        showAlert({title: 'Error', message: `Exact amounts (${(exactTotal / 100).toFixed(2)}) don't add up to total (${amountNum.toFixed(2)})`});
+        return;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // ALL DB WRITES (validation passed)
+    // -----------------------------------------------------------------------
+
     let expenseId: string;
 
     const dateStr = expenseDate.toISOString().split('T')[0];
@@ -228,13 +263,6 @@ export default function AddExpenseScreen() {
         createExpenseSplit(expenseId, phone, splitAmount, null, now);
       });
     } else if (splitType === 'percentage') {
-      const totalPct = selectedMembers.reduce(
-        (sum, phone) => sum + (parseFloat(splitValues[phone] || '0') || 0), 0,
-      );
-      if (Math.abs(totalPct - 100) > 0.01) {
-        showAlert({title: 'Error', message: `Percentages add up to ${totalPct.toFixed(1)}%, not 100%`});
-        return;
-      }
       let allocated = 0;
       selectedMembers.forEach((phone, index) => {
         const pct = parseFloat(splitValues[phone] || '0');
@@ -249,13 +277,6 @@ export default function AddExpenseScreen() {
       });
     } else {
       // exact
-      const exactTotal = selectedMembers.reduce(
-        (sum, phone) => sum + toPaisa(parseFloat(splitValues[phone] || '0') || 0), 0,
-      );
-      if (Math.abs(exactTotal - totalPaisa) > 1) {
-        showAlert({title: 'Error', message: `Exact amounts (${(exactTotal / 100).toFixed(2)}) don't add up to total (${amountNum.toFixed(2)})`});
-        return;
-      }
       for (const phone of selectedMembers) {
         const exact = toPaisa(parseFloat(splitValues[phone] || '0') || 0);
         createExpenseSplit(expenseId, phone, exact, null, now);
@@ -275,7 +296,8 @@ export default function AddExpenseScreen() {
   const styles = makeStyles(colors);
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={styles.screenTitle}>{isEditing ? 'Edit Expense' : 'Add Expense'}</Text>
 
       {/* Description */}
@@ -451,10 +473,13 @@ export default function AddExpenseScreen() {
         const isSelected = selectedMembers.includes(m.phone_number);
         return (
           <View key={m.phone_number} style={styles.memberRow}>
-            <TouchableOpacity
-              style={styles.checkbox}
-              onPress={() => toggleMember(m.phone_number)}>
-              <View style={[styles.checkboxInner, isSelected && styles.checkboxChecked]} />
+            <TouchableOpacity onPress={() => toggleMember(m.phone_number)}>
+              <Icon
+                name={isSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={24}
+                color={isSelected ? colors.primary : colors.border}
+                style={{marginRight: spacing.md}}
+              />
             </TouchableOpacity>
             <Text style={[styles.memberName, !isSelected && styles.memberDisabled]}>
               {m.display_name}
@@ -513,6 +538,7 @@ export default function AddExpenseScreen() {
 
       <View style={{height: spacing.xl}} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -558,24 +584,6 @@ const makeStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: spacing.sm,
-    },
-    checkbox: {
-      width: 24,
-      height: 24,
-      borderRadius: 4,
-      borderWidth: 2,
-      borderColor: colors.border,
-      marginRight: spacing.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    checkboxInner: {
-      width: 14,
-      height: 14,
-      borderRadius: 2,
-    },
-    checkboxChecked: {
-      backgroundColor: colors.primary,
     },
     memberName: {
       flex: 1,

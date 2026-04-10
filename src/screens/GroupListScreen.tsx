@@ -13,6 +13,7 @@ import {getGroupSettlements} from '../db/queries/settlementQueries';
 import {calculateGroupBalances, getNetBalance} from '../utils/balance';
 import {getLocalUser} from '../db/queries/userQueries';
 import {formatCurrency} from '../utils/currency';
+import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import type {Group} from '../models/Group';
 import type {GroupsStackParamList} from '../types/navigation';
 
@@ -52,7 +53,7 @@ export default function GroupListScreen() {
       <FlatList
         data={groups}
         keyExtractor={item => item.id}
-        contentContainerStyle={groups.length === 0 ? styles.emptyContainer : {paddingBottom: spacing['3xl']}}
+        contentContainerStyle={groups.length === 0 ? styles.emptyContainer : {paddingBottom: 80}}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setRefreshKey(k => k + 1); }} tintColor={colors.text} />}
         ListEmptyComponent={
           <EmptyState
@@ -90,7 +91,7 @@ export default function GroupListScreen() {
                         {item.netBalance > 0 ? 'owed' : 'you owe'}
                       </Text>
                       <Text style={{fontSize: 14, fontWeight: '700', color: item.netBalance > 0 ? colors.positive : colors.negative}}>
-                        {formatCurrency(Math.abs(item.netBalance))}
+                        {formatCurrency(Math.abs(item.netBalance), getDefaultCurrency())}
                       </Text>
                     </>
                   ) : (

@@ -1,5 +1,5 @@
 import React, {useCallback, useState, useEffect, useRef} from 'react';
-import {View, Text, FlatList, TouchableOpacity, StyleSheet, Linking} from 'react-native';
+import {View, Text, FlatList, ScrollView, TouchableOpacity, StyleSheet, Linking} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
@@ -7,12 +7,13 @@ import {useTheme} from '../theme';
 import {useAlert} from '../components/ThemedAlert';
 import {fonts} from '../theme/fonts';
 import {spacing} from '../theme/spacing';
-import {getGroup, getGroupMembers, removeGroupMember, updateGroupSimplifyDebts, deleteGroup, voteDeleteGroup, clearDeleteVotes} from '../db/queries/groupQueries';
+import {getGroup, getGroupMembers, removeGroupMember, updateGroupSimplifyDebts, deleteGroup, voteDeleteGroup, clearDeleteVotes, removeDeleteVote} from '../db/queries/groupQueries';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {getGroupExpenses, getExpenseSplits, getExpensePayers} from '../db/queries/expenseQueries';
 import {getGroupSettlements, deleteSettlement} from '../db/queries/settlementQueries';
 import {calculateGroupBalances, getNetBalance} from '../utils/balance';
 import {formatCurrency} from '../utils/currency';
+import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import dayjs from 'dayjs';
 import type {Group, GroupMember} from '../models/Group';
 import type {Expense} from '../models/Expense';
@@ -21,7 +22,8 @@ import type {Debt} from '../utils/balance';
 import {getLocalUser} from '../db/queries/userQueries';
 import {getCategoryByKey} from '../utils/expenseCategories';
 import {triggerAutoSmsSync} from '../sync/AutoSmsSync';
-import {EmptyState, AppButton} from '../components/ui';
+import {generateHlcTimestamp} from '../sync/syncLogger';
+import {EmptyState, AppButton, AppAvatar} from '../components/ui';
 import type {GroupsStackParamList} from '../types/navigation';
 
 interface ActivityItem {
@@ -50,9 +52,11 @@ export default function GroupDetailScreen() {
   const [tab, setTab] = useState<'expenses' | 'balances' | 'members'>('expenses');
   const [showOlderExpenses, setShowOlderExpenses] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const localUserRef = useRef(getLocalUser());
 
   useFocusEffect(
     useCallback(() => {
+      localUserRef.current = getLocalUser();
       const g = getGroup(groupId);
       setGroup(g);
       if (!g) return;
@@ -105,11 +109,33 @@ export default function GroupDetailScreen() {
     members.find(m => m.phone_number === phone)?.display_name || phone;
 
   const handleDeleteMember = (member: GroupMember) => {
-    const user = getLocalUser();
+    const user = localUserRef.current;
     if (member.phone_number === user?.phone_number) {
       showAlert({title: 'Cannot Remove', message: 'You cannot remove yourself from the group.'});
       return;
     }
+
+    const doRemove = () => {
+      const now = generateHlcTimestamp();
+      removeGroupMember(groupId, member.phone_number, now);
+      triggerAutoSmsSync(groupId);
+      setMembers(prev => prev.filter(m => m.phone_number !== member.phone_number));
+    };
+
+    // Check if member has outstanding debts
+    const memberDebts = debts.filter(d => d.from === member.phone_number || d.to === member.phone_number);
+    if (memberDebts.length > 0) {
+      showAlert({
+        title: 'Outstanding Balance',
+        message: `${member.display_name} has unsettled debts. Settle up before removing.`,
+        buttons: [
+          {text: 'Cancel', style: 'cancel'},
+          {text: 'Remove Anyway', style: 'destructive', onPress: () => doRemove()},
+        ],
+      });
+      return;
+    }
+
     showAlert({
       title: 'Remove Member',
       message: `Remove ${member.display_name} from this group?`,
@@ -118,18 +144,14 @@ export default function GroupDetailScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => {
-            const now = Date.now().toString();
-            removeGroupMember(groupId, member.phone_number, now);
-            setMembers(prev => prev.filter(m => m.phone_number !== member.phone_number));
-          },
+          onPress: () => doRemove(),
         },
       ],
     });
   };
 
   const handleLeaveGroup = () => {
-    const user = getLocalUser();
+    const user = localUserRef.current;
     if (!user) return;
     showAlert({
       title: 'Leave Group',
@@ -141,7 +163,7 @@ export default function GroupDetailScreen() {
           text: 'Leave',
           style: 'destructive',
           onPress: () => {
-            const now = Date.now().toString();
+            const now = generateHlcTimestamp();
             removeGroupMember(groupId, user.phone_number, now);
             navigation.goBack();
           },
@@ -151,7 +173,7 @@ export default function GroupDetailScreen() {
   };
 
   const handleDeleteGroup = () => {
-    const user = getLocalUser();
+    const user = localUserRef.current;
     if (!user || !group) return;
     const activeMembers = members.filter(m => m.is_deleted === 0);
     const currentVotes = (group.delete_votes || '').split(',').filter((v: string) => v);
@@ -171,7 +193,7 @@ export default function GroupDetailScreen() {
             text: 'Delete',
             style: 'destructive',
             onPress: () => {
-              const now = Date.now().toString();
+              const now = generateHlcTimestamp();
               deleteGroup(groupId, now);
               triggerAutoSmsSync(groupId);
               navigation.goBack();
@@ -191,7 +213,7 @@ export default function GroupDetailScreen() {
             text: 'Delete Now',
             style: 'destructive',
             onPress: () => {
-              const now = Date.now().toString();
+              const now = generateHlcTimestamp();
               if (!alreadyVoted) voteDeleteGroup(groupId, user.phone_number, now);
               deleteGroup(groupId, now);
               triggerAutoSmsSync(groupId);
@@ -220,8 +242,11 @@ export default function GroupDetailScreen() {
               text: 'Cancel Vote',
               style: 'destructive',
               onPress: () => {
-                const now = Date.now().toString();
-                clearDeleteVotes(groupId, now);
+                const now = generateHlcTimestamp();
+                const currentUser = localUserRef.current;
+                if (currentUser) {
+                  removeDeleteVote(groupId, currentUser.phone_number, now);
+                }
                 triggerAutoSmsSync(groupId);
                 // Refresh
                 const g = getGroup(groupId);
@@ -241,7 +266,7 @@ export default function GroupDetailScreen() {
               text: 'Vote to Delete',
               style: 'destructive',
               onPress: () => {
-                const now = Date.now().toString();
+                const now = generateHlcTimestamp();
                 voteDeleteGroup(groupId, user.phone_number, now);
                 triggerAutoSmsSync(groupId);
                 // Refresh
@@ -271,7 +296,7 @@ export default function GroupDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            const now = Date.now().toString();
+            const now = generateHlcTimestamp();
             deleteSettlement(settlement.id, now);
             triggerAutoSmsSync(groupId);
             setRefreshKey(k => k + 1);
@@ -281,9 +306,10 @@ export default function GroupDetailScreen() {
     });
   };
 
-  const user = getLocalUser();
+  const user = localUserRef.current;
   const netBal = user ? getNetBalance(user.phone_number, debts) : 0;
   const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const displayCurrency = expenses.length > 0 ? expenses[0].currency : getDefaultCurrency();
 
   return (
     <View style={styles.container}>
@@ -300,14 +326,14 @@ export default function GroupDetailScreen() {
           <View style={{flex: 1}}>
             <Text style={styles.groupName}>{group.name}</Text>
             <Text style={styles.headerMeta}>
-              {members.filter(m => m.is_deleted === 0).length} members · Total {formatCurrency(totalSpent)}
+              {members.filter(m => m.is_deleted === 0).length} members · Total {formatCurrency(totalSpent, displayCurrency)}
             </Text>
           </View>
         </View>
         {netBal !== 0 && (
           <View style={[styles.headerBadge, {backgroundColor: (netBal > 0 ? colors.positive : colors.negative) + '12'}]}>
             <Text style={{fontSize: 13, fontWeight: '600', color: netBal > 0 ? colors.positive : colors.negative}}>
-              {netBal > 0 ? `You're owed ${formatCurrency(netBal)}` : `You owe ${formatCurrency(Math.abs(netBal))}`}
+              {netBal > 0 ? `You're owed ${formatCurrency(netBal, displayCurrency)}` : `You owe ${formatCurrency(Math.abs(netBal), displayCurrency)}`}
             </Text>
           </View>
         )}
@@ -318,6 +344,7 @@ export default function GroupDetailScreen() {
           <TouchableOpacity
             key={t}
             style={[styles.tab, tab === t && styles.tabActive]}
+            activeOpacity={0.7}
             onPress={() => setTab(t)}>
             <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -373,12 +400,13 @@ export default function GroupDetailScreen() {
                 return (
                   <TouchableOpacity
                     style={styles.row}
+                    activeOpacity={0.7}
                     onPress={() => navigation.navigate('ExpenseDetail', {expenseId: e.id, groupId})}>
                     <View style={[styles.activityIcon, {backgroundColor: colors.surfaceElevated}]}>
                       <Icon name={getCategoryByKey(e.category || 'general').icon} size={16} color={colors.text} />
                     </View>
                     <View style={styles.rowLeft}>
-                      <Text style={styles.rowTitle}>{e.description}</Text>
+                      <Text style={styles.rowTitle} numberOfLines={1}>{e.description}</Text>
                       <Text style={styles.rowSub}>Paid by {getMemberName(e.paid_by)} · {dayjs(e.expense_date || e.created_at).format('D MMM YYYY')}</Text>
                     </View>
                     <Text style={styles.rowAmount}>{formatCurrency(e.amount, e.currency)}</Text>
@@ -391,13 +419,14 @@ export default function GroupDetailScreen() {
       )}
 
       {tab === 'balances' && (
-        <View style={styles.balancesContainer}>
+        <ScrollView style={styles.balancesContainer} contentContainerStyle={{paddingBottom: 80}}>
           {/* Simplify debts toggle */}
           <TouchableOpacity
             style={styles.simplifyRow}
+            activeOpacity={0.7}
             onPress={() => {
               const newVal = group.simplify_debts === 0;
-              const now = Date.now().toString();
+              const now = generateHlcTimestamp();
               updateGroupSimplifyDebts(groupId, newVal, now);
               setGroup(prev => prev ? {...prev, simplify_debts: newVal ? 1 : 0} : prev);
               // Recalculate
@@ -421,23 +450,26 @@ export default function GroupDetailScreen() {
           </TouchableOpacity>
 
           {debts.length === 0 ? (
-            <Text style={styles.emptyText}>All settled up!</Text>
+            <EmptyState icon="check-circle-outline" title="All settled up!" subtitle="No outstanding balances" />
           ) : (
             debts.map((debt, i) => (
               <View key={i} style={styles.row}>
-                <Text style={styles.rowTitle}>
-                  {getMemberName(debt.from)} owes {getMemberName(debt.to)}
-                </Text>
-                <Text style={styles.rowAmount}>{formatCurrency(debt.amount)}</Text>
+                <View style={{flex: 1}}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>
+                    {getMemberName(debt.from)} owes {getMemberName(debt.to)}
+                  </Text>
+                </View>
+                <Text style={styles.rowAmount}>{formatCurrency(debt.amount, displayCurrency)}</Text>
               </View>
             ))
           )}
           <TouchableOpacity
             style={styles.settleButton}
+            activeOpacity={0.7}
             onPress={() => navigation.navigate('SettleUp', {groupId})}>
             <Text style={styles.settleButtonText}>Settle Up</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       )}
 
       {tab === 'members' && (
@@ -452,10 +484,10 @@ export default function GroupDetailScreen() {
                 <TouchableOpacity
                   style={styles.inviteButton}
                   onPress={() => {
-                    const user = getLocalUser();
-                    const msg = `Hey! I added you to "${group.name}" on SplitXpense. Download the app to track shared expenses locally — no internet needed! - ${user?.display_name}`;
+                    const u = localUserRef.current;
+                    const msg = `Hey! I added you to "${group.name}" on SplitXpense. Download the app to track shared expenses locally — no internet needed! - ${u?.display_name}`;
                     const phones = members
-                      .filter(m => m.phone_number !== user?.phone_number)
+                      .filter(m => m.phone_number !== u?.phone_number)
                       .map(m => m.phone_number)
                       .join(',');
                     if (phones) {
@@ -469,8 +501,8 @@ export default function GroupDetailScreen() {
                 {group.delete_votes && group.delete_votes.length > 0 && (() => {
                   const votes = group.delete_votes.split(',').filter((v: string) => v);
                   const activeCount = members.filter(m => m.is_deleted === 0).length;
-                  const user = getLocalUser();
-                  const myVoted = user ? votes.includes(user.phone_number) : false;
+                  const u = localUserRef.current;
+                  const myVoted = u ? votes.includes(u.phone_number) : false;
                   const voterNames = votes.map(phone => {
                     const m = members.find(mem => mem.phone_number === phone);
                     return m ? m.display_name : phone;
@@ -507,9 +539,12 @@ export default function GroupDetailScreen() {
               </View>
             }
             renderItem={({item}) => {
-              const isMe = item.phone_number === getLocalUser()?.phone_number;
+              const isMe = item.phone_number === localUserRef.current?.phone_number;
               return (
                 <View style={styles.row}>
+                  <View style={{marginRight: spacing.md}}>
+                    <AppAvatar name={item.display_name} size="sm" />
+                  </View>
                   <View style={{flex: 1}}>
                     <Text style={styles.rowTitle}>
                       {item.display_name}{isMe ? ' (You)' : ''}
@@ -535,6 +570,7 @@ export default function GroupDetailScreen() {
         <View style={styles.fabRow}>
           <TouchableOpacity
             style={styles.fab}
+            activeOpacity={0.7}
             onPress={() => navigation.navigate('AddExpense', {groupId})}>
             <Icon name="plus" size={28} color={colors.background} />
           </TouchableOpacity>
@@ -544,6 +580,7 @@ export default function GroupDetailScreen() {
         <View style={styles.fabRow}>
           <TouchableOpacity
             style={styles.fab}
+            activeOpacity={0.7}
             onPress={() => navigation.navigate('AddMember', {groupId})}>
             <Icon name="plus" size={28} color={colors.background} />
           </TouchableOpacity>

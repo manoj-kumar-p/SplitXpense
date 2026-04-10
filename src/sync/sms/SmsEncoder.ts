@@ -27,6 +27,7 @@ const TABLE_ABBREV: Record<string, string> = {
   expense_splits: 'es',
   settlements: 's',
   known_users: 'ku',
+  expense_payers: 'ep',
 };
 
 const TABLE_EXPAND: Record<string, string> = Object.fromEntries(
@@ -51,7 +52,11 @@ export function encodeVectorClock(vc: VectorClock): string {
 }
 
 export function decodeVectorClock(data: string): VectorClock {
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
 }
 
 export function encodeOperations(ops: SyncOperation[]): string {
@@ -68,20 +73,24 @@ export function encodeOperations(ops: SyncOperation[]): string {
 }
 
 export function decodeOperations(data: string): SyncOperation[] {
-  const compact: CompactOperation[] = JSON.parse(data);
-  return compact.map(c => ({
-    id: '',
-    hlc_timestamp: c.h,
-    origin_peer: c.o,
-    table_name: TABLE_EXPAND[c.t] || c.t,
-    row_id: c.r,
-    operation_type: (OP_EXPAND[c.p] || c.p) as any,
-    column_name: c.c,
-    old_value: null,
-    new_value: c.v,
-    applied: 0,
-    created_at: '',
-  }));
+  try {
+    const compact: CompactOperation[] = JSON.parse(data);
+    return compact.map(c => ({
+      id: '',
+      hlc_timestamp: c.h,
+      origin_peer: c.o,
+      table_name: TABLE_EXPAND[c.t] || c.t,
+      row_id: c.r,
+      operation_type: (OP_EXPAND[c.p] || c.p) as any,
+      column_name: c.c,
+      old_value: null,
+      new_value: c.v,
+      applied: 0,
+      created_at: '',
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export function encodeAck(sequenceId: string): string {

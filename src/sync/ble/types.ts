@@ -30,4 +30,4 @@ export const BLE_MSG = {
 } as const;
 
 // Device name prefix for scanning
-export const BLE_DEVICE_PREFIX = 'SE-';
+export const BLE_DEVICE_PREFIX = 'SX-';

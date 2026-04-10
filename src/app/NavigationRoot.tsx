@@ -13,6 +13,7 @@ import AddExpenseScreen from '../screens/AddExpenseScreen';
 import ExpenseDetailScreen from '../screens/ExpenseDetailScreen';
 import SettleUpScreen from '../screens/SettleUpScreen';
 import BalancesScreen from '../screens/BalancesScreen';
+import QuickAddExpenseScreen from '../screens/QuickAddExpenseScreen';
 import FriendsScreen from '../screens/FriendsScreen';
 import ActivityScreen from '../screens/ActivityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -20,6 +21,8 @@ import SyncScreen from '../screens/SyncScreen';
 import StatsScreen from '../screens/StatsScreen';
 import PolicyScreen from '../screens/PolicyScreen';
 import AboutScreen from '../screens/AboutScreen';
+import AccountMappingsScreen from '../screens/AccountMappingsScreen';
+import BackupScreen from '../screens/BackupScreen';
 
 import type {RootTabParamList, GroupsStackParamList, ProfileStackParamList} from '../types/navigation';
 
@@ -53,6 +56,7 @@ function GroupsNavigator() {
       <GroupsStack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{title: 'Expense'}} />
       <GroupsStack.Screen name="SettleUp" component={SettleUpScreen} options={{title: 'Settle Up'}} />
       <GroupsStack.Screen name="GroupBalances" component={BalancesScreen} options={{title: 'Balances'}} />
+      <GroupsStack.Screen name="QuickAddExpense" component={QuickAddExpenseScreen} options={{title: ''}} />
     </GroupsStack.Navigator>
   );
 }
@@ -106,6 +110,8 @@ function ProfileNavigator() {
       <ProfileStack.Screen name="Stats" component={StatsScreen} options={{title: ''}} />
       <ProfileStack.Screen name="Policy" component={PolicyScreen} options={{title: ''}} />
       <ProfileStack.Screen name="About" component={AboutScreen} options={{title: ''}} />
+      <ProfileStack.Screen name="AccountMappings" component={AccountMappingsScreen} options={{title: ''}} />
+      <ProfileStack.Screen name="Backup" component={BackupScreen} options={{title: ''}} />
     </ProfileStack.Navigator>
   );
 }

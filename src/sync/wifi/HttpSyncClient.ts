@@ -1,6 +1,7 @@
 import TcpSocket from 'react-native-tcp-socket';
 import type {VectorClock} from '../crdt/VectorClock';
 import type {SyncOperation} from '../../models/SyncOperation';
+import {getLocalUser} from '../../db/queries/userQueries';
 
 interface SyncResponse {
   status: number;
@@ -28,15 +29,25 @@ export class HttpSyncClient {
       ].join('\r\n');
 
       let responseData = '';
+      let timedOut = false;
       const socket = TcpSocket.createConnection({host: ip, port}, () => {
         socket.write(request);
       });
+
+      // Timeout after 10 seconds
+      const timer = setTimeout(() => {
+        timedOut = true;
+        socket.destroy();
+        reject(new Error('Connection timeout'));
+      }, 10000);
 
       socket.on('data', (chunk: string | Buffer) => {
         responseData += chunk.toString();
       });
 
       socket.on('close', () => {
+        if (timedOut) return;
+        clearTimeout(timer);
         try {
           const headerEnd = responseData.indexOf('\r\n\r\n');
           const statusLine = responseData.substring(0, responseData.indexOf('\r\n'));
@@ -49,14 +60,10 @@ export class HttpSyncClient {
       });
 
       socket.on('error', (err: Error) => {
+        if (timedOut) return;
+        clearTimeout(timer);
         reject(err);
       });
-
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        socket.destroy();
-        reject(new Error('Connection timeout'));
-      }, 10000);
     });
   }
 
@@ -87,7 +94,8 @@ export class HttpSyncClient {
     port: number,
     vectorClock: VectorClock,
   ): Promise<SyncOperation[]> {
-    const res = await this.makeRequest(ip, port, 'POST', '/sync/pull', {vectorClock});
+    const senderPhone = getLocalUser()?.phone_number || '';
+    const res = await this.makeRequest(ip, port, 'POST', '/sync/pull', {vectorClock, senderPhone});
     return res.body.operations || [];
   }
 
@@ -96,7 +104,8 @@ export class HttpSyncClient {
     port: number,
     operations: SyncOperation[],
   ): Promise<{accepted: number; rejected: number}> {
-    const res = await this.makeRequest(ip, port, 'POST', '/sync/push', {operations});
+    const senderPhone = getLocalUser()?.phone_number || '';
+    const res = await this.makeRequest(ip, port, 'POST', '/sync/push', {operations, senderPhone});
     return res.body;
   }
 }

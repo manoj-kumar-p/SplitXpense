@@ -5,6 +5,7 @@ import {WifiSyncManager} from './wifi/WifiSyncManager';
 import {SmsSyncManager} from './sms/SmsSyncManager';
 import {BLEDiscovery} from './ble/BLEDiscovery';
 import {BLESyncManager} from './ble/BLESyncManager';
+import {BLEPeripheral} from './ble/BLEPeripheral';
 import {PeerRegistry} from './PeerRegistry';
 import {getLocalUser} from '../db/queries/userQueries';
 import {getNotificationService} from '../notifications/NotificationService';
@@ -17,6 +18,7 @@ export class SyncOrchestrator {
   private smsManager: SmsSyncManager | null = null;
   private bleDiscovery: BLEDiscovery | null = null;
   private bleSyncManager: BLESyncManager | null = null;
+  private blePeripheral: BLEPeripheral | null = null;
   private peerRegistry: PeerRegistry;
   private started = false;
 
@@ -62,9 +64,10 @@ export class SyncOrchestrator {
     this.smsManager = new SmsSyncManager(this.crdtEngine);
     await this.smsManager.startListening();
 
-    // Initialize BLE sync
+    // Initialize BLE sync — both central (scanner) and peripheral (GATT server) sides.
     this.bleDiscovery = new BLEDiscovery();
     this.bleSyncManager = new BLESyncManager(this.crdtEngine, this.bleDiscovery);
+    this.blePeripheral = new BLEPeripheral(this.crdtEngine);
 
     this.bleDiscovery.onPeerFound(peer => {
       this.peerRegistry.addBlePeer(peer);
@@ -81,6 +84,7 @@ export class SyncOrchestrator {
     await this.httpServer?.stop();
     this.smsManager?.stopListening();
     this.bleDiscovery?.destroy();
+    await this.blePeripheral?.stop().catch(() => {});
 
     this.started = false;
   }
@@ -118,19 +122,27 @@ export class SyncOrchestrator {
   }
 
   /**
-   * Start BLE scanning for nearby peers.
+   * Start BLE scanning AND advertising. The device acts as both central
+   * (scanner) and peripheral (GATT server) so peers can connect either way.
    */
   async startBleScanning(): Promise<void> {
     const user = getLocalUser();
     if (!user || !this.bleDiscovery) return;
     await this.bleDiscovery.startScanning(user.phone_number, user.display_name);
+    // Start the GATT server too — best-effort; may fail on unsupported hardware.
+    try {
+      await this.blePeripheral?.start();
+    } catch (err) {
+      console.warn('[SyncOrchestrator] BLE peripheral start failed:', err);
+    }
   }
 
   /**
-   * Stop BLE scanning.
+   * Stop BLE scanning and advertising.
    */
   stopBleScanning(): void {
     this.bleDiscovery?.stopScanning();
+    this.blePeripheral?.stop().catch(() => {});
   }
 
   /**

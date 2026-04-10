@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView} from 'react-native';
+import {View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView, KeyboardAvoidingView, Platform} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {useTheme} from '../theme';
@@ -14,6 +14,7 @@ import {toPaisa} from '../utils/currency';
 import {CURRENCIES} from '../utils/currencies';
 import {getDefaultCurrency} from '../db/queries/settingsQueries';
 import {triggerAutoSmsSync} from '../sync/AutoSmsSync';
+import {generateHlcTimestamp} from '../sync/syncLogger';
 import type {GroupMember} from '../models/Group';
 import type {GroupsStackParamList} from '../types/navigation';
 
@@ -45,7 +46,18 @@ export default function SettleUpScreen() {
     }
   }, [groupId]);
 
+  useEffect(() => {
+    if (paidTo === paidBy && members.length > 0) {
+      const other = members.find(m => m.phone_number !== paidBy);
+      if (other) setPaidTo(other.phone_number);
+    }
+  }, [paidBy, paidTo, members]);
+
   const handleSettle = () => {
+    if (!paidBy || !paidTo) {
+      showAlert({title: 'Error', message: 'Need at least 2 members to settle'});
+      return;
+    }
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum <= 0) {
       showAlert({title: 'Error', message: 'Please enter a valid amount'});
@@ -56,7 +68,7 @@ export default function SettleUpScreen() {
       return;
     }
 
-    const now = Date.now().toString();
+    const now = generateHlcTimestamp();
     createSettlement(groupId, paidBy, paidTo, toPaisa(amountNum), currency, new Date().toISOString(), now);
 
     // Trigger auto-SMS sync in background
@@ -67,8 +79,19 @@ export default function SettleUpScreen() {
 
   const styles = makeStyles(colors);
 
+  if (members.length < 2) {
+    return (
+      <View style={styles.container}>
+        <Text style={{fontSize: fonts.sizes.base, color: colors.textMuted, textAlign: 'center', marginTop: spacing['2xl']}}>
+          Need at least 2 members to settle up
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <KeyboardAvoidingView style={{flex: 1}} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>Who paid?</Text>
       <View style={styles.chipRow}>
         {members.map(m => (
@@ -104,7 +127,8 @@ export default function SettleUpScreen() {
       <Text style={styles.label}>Currency</Text>
       <TouchableOpacity
         style={styles.currencyButton}
-        onPress={() => setShowCurrencyPicker(true)}>
+        onPress={() => setShowCurrencyPicker(true)}
+        activeOpacity={0.7}>
         <Text style={styles.currencyButtonText}>
           {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{' '}
           {currency}
@@ -125,6 +149,7 @@ export default function SettleUpScreen() {
                 {borderBottomColor: colors.border},
                 item.code === currency && {backgroundColor: colors.surfaceElevated},
               ]}
+              activeOpacity={0.7}
               onPress={() => {
                 setCurrency(item.code);
                 setShowCurrencyPicker(false);
@@ -146,6 +171,7 @@ export default function SettleUpScreen() {
         style={styles.button}
       />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

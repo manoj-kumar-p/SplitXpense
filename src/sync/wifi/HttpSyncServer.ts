@@ -1,7 +1,7 @@
 import TcpSocket from 'react-native-tcp-socket';
 import {SYNC_PORT} from '../../constants/syncConstants';
 import {CRDTEngine} from '../crdt/CRDTEngine';
-import {getVectorClock, updateVectorClock} from '../../db/queries/syncQueries';
+import {getVectorClock, updateVectorClock, getPeer} from '../../db/queries/syncQueries';
 import {getLocalUser} from '../../db/queries/userQueries';
 import type {VectorClock} from '../crdt/VectorClock';
 import type {SyncOperation} from '../../models/SyncOperation';
@@ -11,6 +11,8 @@ interface ParsedRequest {
   path: string;
   body: string;
 }
+
+const MAX_BODY_SIZE = 1024 * 1024; // 1MB
 
 export class HttpSyncServer {
   private server: any = null;
@@ -27,13 +29,28 @@ export class HttpSyncServer {
       socket.on('data', (chunk: Buffer) => {
         data += chunk.toString();
 
-        // Check if we have a complete HTTP request
-        if (data.includes('\r\n\r\n')) {
-          const request = this.parseRequest(data);
-          const response = this.handleRequest(request);
-          socket.write(this.formatResponse(response.status, response.body));
+        // Check for body size limit to prevent OOM
+        if (data.length > MAX_BODY_SIZE) {
+          socket.write('HTTP/1.1 413 Payload Too Large\r\n\r\n');
           socket.destroy();
+          return;
         }
+
+        // Check if we have complete headers
+        const headerEnd = data.indexOf('\r\n\r\n');
+        if (headerEnd === -1) return; // Wait for headers
+
+        // Parse Content-Length and wait for full body
+        const headers = data.substring(0, headerEnd);
+        const contentLengthMatch = headers.match(/content-length:\s*(\d+)/i);
+        const contentLength = contentLengthMatch ? parseInt(contentLengthMatch[1], 10) : 0;
+        const body = data.substring(headerEnd + 4);
+        if (body.length < contentLength) return; // Wait for more data
+
+        const request = this.parseRequest(data);
+        const response = this.handleRequest(request);
+        socket.write(this.formatResponse(response.status, response.body));
+        socket.destroy();
       });
 
       socket.on('error', () => {
@@ -77,17 +94,17 @@ export class HttpSyncServer {
       }
       return {status: 404, body: JSON.stringify({error: 'Not found'})};
     } catch (error: any) {
-      return {status: 500, body: JSON.stringify({error: error.message})};
+      console.warn('[HttpSync] Request error:', error.message);
+      return {status: 500, body: JSON.stringify({error: 'Internal server error'})};
     }
   }
 
   private handlePing(): {status: number; body: string} {
-    const user = getLocalUser();
     return {
       status: 200,
       body: JSON.stringify({
         status: 'ok',
-        phone: user?.phone_number,
+        app: 'splitxpense',
         timestamp: new Date().toISOString(),
       }),
     };
@@ -95,6 +112,12 @@ export class HttpSyncServer {
 
   private handleHandshake(body: string): {status: number; body: string} {
     const {phone, vectorClock}: {phone: string; vectorClock: VectorClock} = JSON.parse(body);
+
+    // Verify the sender is a known peer
+    if (!phone || !getPeer(phone)) {
+      return {status: 403, body: JSON.stringify({error: 'Unknown peer'})};
+    }
+
     const user = getLocalUser();
     if (!user) return {status: 500, body: JSON.stringify({error: 'Not set up'})};
 
@@ -110,7 +133,14 @@ export class HttpSyncServer {
   }
 
   private handlePull(body: string): {status: number; body: string} {
-    const {vectorClock}: {vectorClock: VectorClock} = JSON.parse(body);
+    const {vectorClock, senderPhone}: {vectorClock: VectorClock; senderPhone?: string} = JSON.parse(body);
+
+    // Verify the sender is a known peer
+    const sender = senderPhone || '';
+    if (!sender || !getPeer(sender)) {
+      return {status: 403, body: JSON.stringify({error: 'Unknown peer'})};
+    }
+
     const operations = this.crdtEngine.getDeltasSince(vectorClock);
 
     return {
@@ -120,7 +150,14 @@ export class HttpSyncServer {
   }
 
   private handlePush(body: string): {status: number; body: string} {
-    const {operations}: {operations: SyncOperation[]} = JSON.parse(body);
+    const {operations, senderPhone}: {operations: SyncOperation[]; senderPhone?: string} = JSON.parse(body);
+
+    // Verify the sender is a known peer
+    const sender = senderPhone || '';
+    if (!sender || !getPeer(sender)) {
+      return {status: 403, body: JSON.stringify({error: 'Unknown peer'})};
+    }
+
     let accepted = 0;
     let rejected = 0;
 
@@ -128,6 +165,11 @@ export class HttpSyncServer {
       const applied = this.crdtEngine.applyRemote(op);
       if (applied) accepted++;
       else rejected++;
+    }
+
+    // Update vector clocks for all received operations
+    for (const op of operations) {
+      updateVectorClock(sender, op.origin_peer, op.hlc_timestamp);
     }
 
     return {

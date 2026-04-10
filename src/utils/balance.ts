@@ -39,9 +39,11 @@ function buildNetBalances(
         netBalance[expense.paid_by] += expense.amount;
       } else {
         const perPayer = Math.floor(expense.amount / payerPhones.length);
-        for (const phone of payerPhones) {
+        const remainder = expense.amount - perPayer * payerPhones.length;
+        for (let idx = 0; idx < payerPhones.length; idx++) {
+          const phone = payerPhones[idx];
           ensure(phone);
-          netBalance[phone] += perPayer;
+          netBalance[phone] += perPayer + (idx === 0 ? remainder : 0);
         }
       }
     }
@@ -76,13 +78,39 @@ export function calculateGroupBalances(
   payers?: ExpensePayer[],
   simplify: boolean = true,
 ): Debt[] {
-  const netBalance = buildNetBalances(expenses, splits, settlements, payers);
+  // Determine the dominant currency (most frequently used) and filter out
+  // expenses in other currencies to avoid incorrect cross-currency sums.
+  // TODO: Proper multi-currency support with exchange rates.
+  let filteredExpenses = expenses;
+  let primaryCurrency = expenses[0]?.currency || 'INR';
+  if (expenses.length > 0) {
+    const currencyCount: Record<string, number> = {};
+    for (const e of expenses) {
+      currencyCount[e.currency] = (currencyCount[e.currency] || 0) + 1;
+    }
+    primaryCurrency = Object.entries(currencyCount).sort((a, b) => b[1] - a[1])[0][0];
+    const mixedCurrencies = Object.keys(currencyCount).length > 1;
+    if (mixedCurrencies) {
+      console.warn(
+        `[balance] Group has mixed currencies (${Object.keys(currencyCount).join(', ')}). ` +
+        `Only "${primaryCurrency}" expenses are included in balance calculations.`,
+      );
+      filteredExpenses = expenses.filter(e => e.currency === primaryCurrency);
+    }
+  }
+
+  // Also filter settlements to dominant currency
+  const filteredSettlements = filteredExpenses === expenses
+    ? settlements
+    : settlements.filter(s => s.currency === primaryCurrency);
+
+  const netBalance = buildNetBalances(filteredExpenses, splits, filteredSettlements, payers);
 
   if (simplify) {
     return simplifyDebts(netBalance);
   }
 
-  return unsimplifiedDebts(expenses, splits, settlements, payers);
+  return unsimplifiedDebts(filteredExpenses, splits, filteredSettlements, payers);
 }
 
 /**
@@ -131,8 +159,10 @@ function unsimplifiedDebts(
         payerAmounts.push({phone: expense.paid_by, amount: expense.amount});
       } else {
         const perPayer = Math.floor(expense.amount / payerPhones.length);
-        for (const phone of payerPhones) {
-          payerAmounts.push({phone, amount: perPayer});
+        const remainder = expense.amount - perPayer * payerPhones.length;
+        for (let idx = 0; idx < payerPhones.length; idx++) {
+          const phone = payerPhones[idx];
+          payerAmounts.push({phone, amount: perPayer + (idx === 0 ? remainder : 0)});
         }
       }
     }
@@ -142,7 +172,7 @@ function unsimplifiedDebts(
       for (const payer of payerAmounts) {
         if (split.phone_number === payer.phone) continue;
         // Split member owes payer: split.amount * (payer.amount / total)
-        const payerShare = Math.round(split.amount * payer.amount / expense.amount);
+        const payerShare = expense.amount > 0 ? Math.round(split.amount * payer.amount / expense.amount) : 0;
         addPairwise(split.phone_number, payer.phone, payerShare);
       }
     }

@@ -10,7 +10,21 @@ export function getDatabase(): DB {
     db = open({name: DB_NAME});
     db.executeSync('PRAGMA journal_mode = WAL;');
     db.executeSync('PRAGMA foreign_keys = ON;');
-    initializeSchema();
+    try {
+      initializeSchema();
+    } catch (e) {
+      console.error('DB init failed, attempting recovery:', e);
+      // Delete corrupted database and recreate from scratch
+      try {
+        db.delete();
+        db = open({name: DB_NAME});
+        db.executeSync('PRAGMA journal_mode = WAL;');
+        db.executeSync('PRAGMA foreign_keys = ON;');
+        initializeSchema();
+      } catch (e2) {
+        console.error('Database recovery failed:', e2);
+      }
+    }
   }
   return db;
 }
@@ -45,12 +59,15 @@ function runMigrations(): void {
     "ALTER TABLE groups ADD COLUMN simplify_debts INTEGER DEFAULT 1;",
     "ALTER TABLE groups ADD COLUMN delete_votes TEXT DEFAULT '';",
     "ALTER TABLE peers ADD COLUMN last_ble_sync TEXT;",
+    "ALTER TABLE pending_transactions ADD COLUMN note TEXT DEFAULT '';",
   ];
   for (const sql of migrations) {
     try {
       db.executeSync(sql);
-    } catch (_) {
-      // Column already exists, ignore
+    } catch (e: any) {
+      if (!e?.message?.includes('duplicate column')) {
+        console.error('Migration failed:', sql, e);
+      }
     }
   }
 }
